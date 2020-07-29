@@ -1,0 +1,3 @@
+[submodule "metrics/PerceptualSimilarity"]
+	path = metrics/PerceptualSimilarity
+	url = https://github.com/richzhang/PerceptualSimilarity.git
