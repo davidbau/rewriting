@@ -3,7 +3,7 @@
 This is the source code release for the paper
 [**Rewriting a Deep Generative Model**](https://rewriting.csail.mit.edu/). David Bau, Steven Liu, Tongzhou Wang, Jun-Yan Zhu, Antonio Torralba, ECCV 2020 (oral).
 
-[![Video](/setup/video-thumbnail.png)](https://rewriting.csail.mit.edu/video/) 
+[![Video](/images/video-thumbnail.png)](https://rewriting.csail.mit.edu/video/) 
 
 The code runs using pytorch.
 
