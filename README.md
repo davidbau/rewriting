@@ -1,7 +1,8 @@
 # Rewriting a Deep Generative Model
 
-<a href="http://rewriting.csail.mit.edu/"><img src='images/horse-hat-edit.gif'></a>
-Directly rewriting the weights of a StyleGANv2 model to reprogram horses to have hats.
+<table><tr><td><a href="http://rewriting.csail.mit.edu/"><img src='images/horse-hat-edit.gif'></a><br>
+Directly rewriting the weights of a StyleGANv2<br>
+to reprogram horses to have hats.</td></tr></table>
 
 This is the source code release for the paper
 [**Rewriting a Deep Generative Model**](https://rewriting.csail.mit.edu/). David Bau, Steven Liu, Tongzhou Wang, Jun-Yan Zhu, Antonio Torralba, ECCV 2020 (oral).
