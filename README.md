@@ -1,6 +1,6 @@
 # Rewriting a Deep Generative Model
 
-In this paper we ask if a state-of-the-art deep network can be edited by a user directly changing the weights, instead of training with a data set.
+In this paper we ask if a state-of-the-art deep network can be reprogrammed to follow different rules, by a user directly changing the weights, instead of training with a data set.
 
 <table><tr><td><a href="http://rewriting.csail.mit.edu/"><img src='images/horse-hat-edit.gif'></a><br>
 Directly rewriting the weights of a StyleGANv2<br>
