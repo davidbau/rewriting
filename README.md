@@ -1,4 +1,4 @@
-# Rewriting a Deep Generative Model
+# Rewriting a Deep Generative Model <a href="http://rewriting.csail.mit.edu/"><img src='images/horse-hat-edit.gif' align="right">
 
 This is the source code release for the paper
 [**Rewriting a Deep Generative Model**](https://rewriting.csail.mit.edu/). David Bau, Steven Liu, Tongzhou Wang, Jun-Yan Zhu, Antonio Torralba, ECCV 2020 (oral).
