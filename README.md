@@ -31,7 +31,7 @@ MIT CSAIL and Adobe Research.
 <img src='images/rewriting_teaser.gif' width="800px" />
 
 Our method rewrites the weights of a generator to change generative rules.
-Instead of editing individual images, our method edits the generator, so an infinite set of images can be potentially synthesized and manipulated using the altered rules.  Rules can be changed in various ways, such as *removing* patterns such as watermarks, *adding* objects such as people, or *replacing* definitions such as making trees grow out of towers.
+Instead of editing individual images, our method edits the generator, so an infinite set of images can be potentially synthesized and manipulated using the altered rules.  Rules can be changed in various ways, such as *removing* patterns like watermarks, *adding* objects such as people, or *replacing* definitions such as making trees grow out of towers.
 
 <img src='images/method.png' width="800px" />
 
