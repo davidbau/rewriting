@@ -1,9 +1,11 @@
-import json, sys, argparse, os
+import models
+import sys
+import argparse
+import os
 from tqdm import tqdm
 
 import torch
 from torch import nn
-import torchvision
 from torchvision import transforms
 from PIL import Image
 
@@ -11,17 +13,17 @@ from metrics.load_mask import load_mask_info
 from metrics.load_seg import load_seg_info_from_exp_name
 
 sys.path.append('./metrics/PerceptualSimilarity')
-import models
+
 
 class PerceptualLoss(nn.Module):
-    #TODO: from jacob's code, cite it
+    # TODO: from jacob's code, cite it
     def __init__(self, net='vgg', use_gpu=True, precision='float'):
         """ LPIPS loss with spatial weighting """
         super(PerceptualLoss, self).__init__()
         self.lpips = models.PerceptualLoss(model='net-lin',
-                                            net=net,
-                                            spatial=True,
-                                            use_gpu=use_gpu)
+                                           net=net,
+                                           spatial=True,
+                                           use_gpu=use_gpu)
         if use_gpu:
             self.lpips = nn.DataParallel(self.lpips).cuda()
         if precision == 'half':
@@ -63,14 +65,14 @@ class Dataset():
         self.before_img = before_imgs
         self.after_img = after_imgs
         self.transform = transforms.Compose([
-                            transforms.ToTensor(),
-                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                        ])
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
         self.srcc = srcc
 
     def __getitem__(self, key):
         before_seg = torch.load(os.path.join(self.before_seg, f'{key}.pth'), map_location='cpu')[self.srcc]
-        
+
         before_img = self.transform(Image.open(os.path.join(self.before_img, f'{key}.png')))
         after_img = self.transform(Image.open(os.path.join(self.after_img, f'{key}.png')))
 
@@ -78,6 +80,7 @@ class Dataset():
             return before_seg, before_img, after_img
         else:
             return before_seg.clone(), before_img.clone(), after_img.clone()
+
 
 class Sampler(torch.utils.data.Sampler):
     def __init__(self, indices):
@@ -106,9 +109,9 @@ def compute_dl(before_imgs, before_seg, after_imgs, indices, src=[1708], srcc=2,
         after_imgs = after_imgs.cuda()
         masks = torch.ones_like(before_segs)
 
-        #take union of masks
+        # take union of masks
         for index in src:
-            masks = masks * (before_segs != index).long() 
+            masks = masks * (before_segs != index).long()
 
         if lpips:
             for before, after, mask in zip(before_imgs, after_imgs, masks):
@@ -129,7 +132,7 @@ def compute_dl(before_imgs, before_seg, after_imgs, indices, src=[1708], srcc=2,
             total += (differences * masks).sum().item()
             count += masks.long().sum().item()
 
-    print(total, count, total/count)
+    print(total, count, total / count)
     return total, count
 
 
@@ -150,7 +153,7 @@ if __name__ == '__main__':
     before_imgs = os.path.join('results/samples', f'{dataset}_clean')
     before_seg = os.path.join('results/samples/seg', f'{dataset}_clean')
     _, srcc, _, src, _ = load_seg_info_from_exp_name(args.exp_name)
-        
+
     total, count = compute_dl(before_imgs, before_seg, after_imgs, torch.arange(10000), src=src, srcc=srcc)
 
     print(f"after: {args.exp_name}")

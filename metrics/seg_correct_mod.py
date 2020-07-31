@@ -1,10 +1,12 @@
-import argparse, os
+import argparse
+import os
 from tqdm.auto import tqdm
 
 import torch
 
 from metrics.load_seg import load_seg_info_from_exp_name
 from metrics.load_mask import load_mask_info
+
 
 class Dataset():
     def __init__(self, before, after, tgtc=0, srcc=2):
@@ -58,7 +60,7 @@ def compute_dl(before, after, indices, tgt=[5], tgtc=0, src=[1708], srcc=2, batc
             after_mask = after_mask + (mapped == tgti).long()
         total += (after_mask > 0).sum().item()
         count += mapped.shape[0]
-    
+
     print(total, count)
     return total, count
 

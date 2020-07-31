@@ -1,8 +1,8 @@
-import argparse, os
+import argparse
+import os
 from tqdm.auto import tqdm
 
 import torch
-import torchvision
 from torchvision import transforms
 from PIL import Image
 from utils.workerpool import WorkerBase, WorkerPool
@@ -12,8 +12,9 @@ from metrics.load_seg import load_seg_info_from_exp_name, load_seg
 
 N = 10000
 
+
 def process(segmodel, img_path, result_path, batch_size=128, transform=None,
-        device='cuda', **kwargs):
+            device='cuda', **kwargs):
     rd = reserve_dir(result_path)
     saver = SaveSegPool()
     with torch.no_grad():
@@ -25,10 +26,12 @@ def process(segmodel, img_path, result_path, batch_size=128, transform=None,
     saver.join()
     rd.done()
 
+
 class SaveSegWorker(WorkerBase):
     def work(self, paths, segs):
         for path, seg in zip(paths, segs):
             torch.save(seg, path)
+
 
 class SaveSegPool(WorkerPool):
     def __init__(self, *args, **kwargs):
@@ -41,9 +44,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='seg')
     parser.add_argument('exp_name', type=str)
     args = parser.parse_args()
-    
-    segmodel_name, _, _, _, _= load_seg_info_from_exp_name(args.exp_name)
-    
+
+    segmodel_name, _, _, _, _ = load_seg_info_from_exp_name(args.exp_name)
+
     segmodel = load_seg(segmodel_name)
     img_path = os.path.join('results/samples', args.exp_name)
     result_path = os.path.join('results/samples/seg', args.exp_name)

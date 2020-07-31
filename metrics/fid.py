@@ -1,14 +1,13 @@
 from __future__ import absolute_import, division, print_function
+import torch
+import warnings
+from tqdm import tqdm
+import pathlib
+from scipy import linalg
+import tensorflow as tf
 import numpy as np
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-import tensorflow as tf
-from scipy import linalg
-import pathlib
-import urllib
-from tqdm import tqdm
-import warnings
-import torch
 
 
 def check_or_download_inception(inception_path):
@@ -85,7 +84,7 @@ def _get_inception_layer(sess):
     return pool3
 
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 
 def get_activations(images, sess, batch_size=200, verbose=False):
@@ -132,7 +131,7 @@ def get_activations(images, sess, batch_size=200, verbose=False):
     return pred_arr
 
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 
 def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
@@ -140,7 +139,7 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
     The Frechet distance between two multivariate Gaussians X_1 ~ N(mu_1, C_1)
     and X_2 ~ N(mu_2, C_2) is
             d^2 = ||mu_1 - mu_2||^2 + Tr(C_1 + C_2 - 2*sqrt(C_1*C_2)).
-            
+
     Stable version by Dougal J. Sutherland.
     Params:
     -- mu1 : Numpy array containing the activations of the pool_3 layer of the
@@ -256,13 +255,11 @@ if __name__ == '__main__':
     parser.add_argument('--target')
     args = parser.parse_args()
 
-
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
-
 
     images1 = []
     for file_name in tqdm(os.listdir(args.source)):
@@ -270,7 +267,6 @@ if __name__ == '__main__':
             path = os.path.join(args.source, file_name)
             images1.append(transform(Image.open(path).convert('RGB')))
     images1 = torch.stack(images1)
-
 
     images2 = []
     for file_name in tqdm(os.listdir(args.source)):
@@ -284,7 +280,3 @@ if __name__ == '__main__':
     with open('fid_results.txt', 'a+') as f:
         f.write(args.source + args.target + ':\n')
         f.write(str(result) + '\n')
-        
-
-
-

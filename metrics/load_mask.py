@@ -1,9 +1,10 @@
-import os, json
+import os
+import json
 import urllib
 
 MASK_URLS = 'http://rewriting.csail.mit.edu/data/masks/'
 
-name2info = { #maps name to [clean image names, mask path, layer num]
+name2info = {  # maps name to [clean image names, mask path, layer num]
     'dome2spire': ['church', 'dome2spire.json', 8],
     'dome2tree': ['church', 'dome2tree.json', 8],
     'dome2castle': ['church', 'dome2castle.json', 6],

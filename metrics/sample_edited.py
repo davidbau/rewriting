@@ -1,9 +1,10 @@
-import os, json, sys, argparse, shutil
+import os
+import json
+import argparse
+import shutil
 from tqdm import tqdm
 
 import torch
-import numpy as np
-from torchvision import utils
 
 from utils.stylegan2 import load_seq_stylegan
 from utils.pidfile import reserve_dir
@@ -23,8 +24,10 @@ parser.add_argument('--single_context', type=int, default=-1)
 args = parser.parse_args()
 
 exp_name = args.mask
-if args.full_rank: exp_name = exp_name + '_full_rank'
-if args.single_context != -1: exp_name = exp_name + f'_context{args.single_context}'
+if args.full_rank:
+    exp_name = exp_name + '_full_rank'
+if args.single_context != -1:
+    exp_name = exp_name + f'_context{args.single_context}'
 rd = reserve_dir(os.path.join('results/samples', exp_name))
 shutil.copyfile('utils/lightbox.html', rd('+lightbox.html'))
 
