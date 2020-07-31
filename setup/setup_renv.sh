@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Bash script to set up an anaconda python-based deep learning environment
-# that has support for pytorch, tensorflow, pycaffe in the same environment,
-# long with juypter, scipy etc.
+# that has support for pytorch and needed dependencies.  It assumes that
+# you have (mini)conda installed.
 
 # This should not require root.  However, it does copy and build a lot of
 # binaries into your ~/.conda directory.  If you do not want to store
