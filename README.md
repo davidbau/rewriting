@@ -42,5 +42,5 @@ The code runs using pytorch.
 
 It's designed to use a recent version of pytorch (1.4+) on python (3.6), using
 cuda 10.1 and cudnn 7.6.0.  The `/setup` directory has a script to create a
-conda environment that should work.
+conda environment that has the needed dependencies.
 
