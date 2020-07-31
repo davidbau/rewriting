@@ -15,6 +15,10 @@ David Bau, Steven Liu, Tongzhou Wang, Jun-Yan Zhu, Antonio Torralba, ECCV 2020 (
 <td><center><a href="https://colab.research.google.com/github/davidbau/rewriting/blob/master/notebooks/rewriting-interface.ipynb" class="d-inline-block p-3 align-bottom"><img height="78" width="136" src="images/colab-thumb.png" style="border:1px solid" data-nothumb=""><br>Demo Colab<br>Notebook</a></center></td></tr></table>
 
 
+<img src="images/example-eyebrows.png">
+
+## Tips
+
 The code runs using pytorch.
 
 * The method and interface can be found in `/rewriting`
