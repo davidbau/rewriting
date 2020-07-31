@@ -120,29 +120,6 @@ class ProgressiveGanRewriter(object):
     def sample_image_from_latent(self, z):
         return self.rendering_model(self.target_model(self.context_model(z)))
 
-    def sample_image_patch(self, z, act_crop_size, seed=(None, None), act=False, size=4):
-        feature_map = self.context_model(z)
-        assert (act_crop_size <= feature_map.size(2))
-
-        if seed[0] is not None:
-            xi, yi = seed
-        else:
-            h, w = feature_map.shape[2:]
-            xi = random.randint(0, h - act_crop_size)
-            yi = random.randint(0, w - act_crop_size)
-
-        xf, yf = xi + act_crop_size, yi + act_crop_size
-        feature_map_cropped = feature_map[:, :, xi:xf, yi:yf]
-
-        result = self.rendering_model(self.target_model(feature_map_cropped))
-
-        if not act:
-            return result
-        else:
-            highest_channel = feature_map_cropped.max(3)[0].max(2)[0].max(1)[1].item()
-            iv = imgviz.ImageVisualizer((size, size))
-            return result, iv.heatmap(feature_map_cropped[0, highest_channel], mode='nearest')
-
     def merge_target_output(self, target_out, new_acts, crop_bounds):
         '''
         Produce a renderable target output using new activations,
@@ -201,18 +178,6 @@ class ProgressiveGanRewriter(object):
             p_imgnum, p_mask, rgb_clip, obj_area)
         self.all_weights_insert(changed_rgb, host_z, bounds=bounds,
                                 update_callback=update_callback, niter=niter, lr=lr)
-
-    def all_weights_insert(self, x, z, bounds=None, update_callback=None,
-                           niter=20001, lr=0.01):
-
-        obj_acts, obj_output, obj_area, bounds = (
-            self.object_from_selection(o_imgnum, o_mask))
-        goal_in, goal_out = self.paste_from_selection(
-            p_imgnum, p_mask, obj_acts, obj_area)
-        mkey = self.multi_key_from_selection(key_examples, rank=rank)
-        self.insert(goal_in, goal_out, mkey,
-                    update_callback=update_callback,
-                    niter=niter, piter=piter, lr=lr)
 
     def detach(self, v):
         return v.detach()
@@ -462,11 +427,6 @@ class ProgressiveGanRewriter(object):
             k_acts = self.context_acts(k_outs)
             mean = (k_acts[0] * area[None].to(self.device)
                     ).sum(2).sum(1) / (1e-10 + area.sum())
-        # Old version: zeroed all but top 100 components of k; and
-        # also omit channel 418!!  Here we just omit 418.
-        # TODO: does it work without the blacklist?
-        # blacklist = [418]
-        # k[blacklist] = 0
         k = self.covariance_adjusted_query_key(mean)
         k = k / (1e-10 + k.norm(2))
         return k
