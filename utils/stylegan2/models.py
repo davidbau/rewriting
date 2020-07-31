@@ -1,10 +1,25 @@
 ####
 # A sequential version of stylegan that is perfectly compatible with
 # the pytorch port by https://github.com/rosinality/stylegan2-pytorch.
+# (this port by David Bau, with low level operations frrom rosinality).
+#
 # In this implementation, all non-leaf modules are subclasses of
-# nn.Sequential so that they can be more easily split apart.
-# Because stylegan has style, featuremap, RGB, and noise data that all
-# flow through the network in parallel, these are gathered in a DataBag.
+# nn.Sequential so that they can be more easily split apart for
+# surgery.  Because stylegan has style, featuremap, RGB, and noise
+# data that all flow through the network in parallel, these are
+# gathered in a DataBag (dict subclass).
+#
+# An essential trick: to rewrite convolutional layers inside StyleGAN
+# effectively, we need to express the rewrritten layer as a linear
+# convolution followed by nonlinearities; this allows us to treat
+# the learned convolution as a linear associative memory. (See
+# the paper for details.) But stylegan code happens to combine
+# the linear convolution with a style modulation, which breaks this
+# form.  So in the code below, we write ModulatedConv2dSeq to
+# explicitly separate the style modulation from the convolution
+# steps, so we can rewrite the learned convolution directly.
+# This separated form is slightly slower, so we only do it if
+# constructing with the option mconv='seq'.
 
 from . import op
 from collections import OrderedDict

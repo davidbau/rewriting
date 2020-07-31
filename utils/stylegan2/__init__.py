@@ -1,3 +1,11 @@
+####
+# This port of styleganv2 is derived from and perfectly compatible with
+# the pytorch port by https://github.com/rosinality/stylegan2-pytorch.
+#
+# In this reimplementation, all non-leaf modules are subclasses of
+# nn.Sequential so that the network can be more easily split apart
+# for surgery and direct rewriting.
+
 import os
 
 import torch
