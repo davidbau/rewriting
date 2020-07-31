@@ -61,3 +61,47 @@ The code runs using PyTorch.
 It's designed to use a recent version of PyTorch (1.4+) on python (3.6), using
 cuda 10.1 and cudnn 7.6.0.  Run `setup/setup_renv.sh` to create a conda environment
 that has the needed dependencies.
+
+## Rewriting your own models
+
+To edit your own models, do the following:
+ * Train your GAN using the standard StyleGAN v2 tensorflow release, found
+   at https://github.com/NVlabs/stylegan2
+ * Convert your trained weights to pytorch using the `convert_weight.py` utility 
+   by rosinality, found in https://github.com/rosinality/stylegan2-pytorch
+ * Then those weight files can be directly loaded by our sequentialiized
+   StyleGAN port, as follows:
+```
+# Resolution (size) and style dimensionality (style_dim and n_mlp) are
+# the architecture dimensions as you trained them.  The truncation trick can be
+# applied here if desired (truncation=1.0 if not).
+model = SeqStyleGAN2(size=256, style_dim=512, n_mlp=8, truncation=0.5, **kwargs)
+
+# load the exponential moving average model weights
+state_dict = torch.load('your_model.pt')
+model.load_state_dict(state_dict['g_ema'])
+```
+ * Create a `ganrewrite.SeqStyleGanRewriter` instance to edit your model
+```
+layernum = 8 # or which ever layer you wish to modify
+sample_size = 1000 # a small sample of images for computing statistics
+zds = zdataset.z_dataset_for_model(model, size=sample_size)
+gw = SeqStyleGanRewriter(
+    model, zds, layernum,
+    cachedir='experiments')
+```
+ * Finally, to specify and create changes, you can use the
+   `rewriteapp.GanRewriteApp` interface (assumes you are running
+   in a notebook.  This interface can be used to try edits
+   and save and load json files with stored model edit specifications.
+```
+savedir = 'masks'
+interface = rewriteapp.GanRewriteApp(gw, size=256, mask_dir=savedir, num_canvases=32)
+```
+ * To bulk-generate images from an edited model (notebook UI not needed),
+   you can do the following, then sample the output of the modified model
+   as usual.  See `metrics/sample_edited.py` for an example.
+```
+saved_edit = 'masks/my_edit.json'
+gw.apply_edit(json.load(f), rank=1)
+```
