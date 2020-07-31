@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# This script creates directories of images that
+# reproduce the watermark experiment from section
+# 5.2 of the paper.
+
 set -ex
 # Start from directory of script
 cd "$(dirname "$(readlink -f "$0")")"

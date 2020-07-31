@@ -1,4 +1,9 @@
 #!/bin/bash
+# This script reproduces the quantitative experiments in section
+# 5.1 of the paper.  This invokes scripts within metrics/
+# to generate large samples of edited images and compute
+# metrics evaluating effective changes and undesired changes.
+
 set -ex
 # Generate unedited and edited images, 10k each directory.
 for CLEAN_EXP in faces church; do
