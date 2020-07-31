@@ -103,5 +103,5 @@ interface = rewriteapp.GanRewriteApp(gw, size=256, mask_dir=savedir, num_canvase
    as usual.  See `metrics/sample_edited.py` for an example.
 ```
 saved_edit = 'masks/my_edit.json'
-gw.apply_edit(json.load(f), rank=1)
+gw.apply_edit(json.load(saved_edit), rank=1)
 ```
