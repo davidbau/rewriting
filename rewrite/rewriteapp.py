@@ -1,8 +1,10 @@
-import copy, os, torch, json, random
-from utils import nethook, renormalize, pbar, tally, imgviz
-from utils import show, upsample, labwidget, paintwidget
-from collections import OrderedDict, defaultdict
-import torchvision
+import copy
+import os
+import torch
+import json
+from utils import renormalize, imgviz
+from utils import show, labwidget, paintwidget
+from collections import OrderedDict
 
 
 ##########################################################################
@@ -13,60 +15,60 @@ class GanRewriteApp(labwidget.Widget):
 
     def __init__(self, gw, mask_dir=None, size=256, num_canvases=9):
         super().__init__(style=dict(border="0", padding="0",
-            display="inline-block", width="1000px",
-            left="0", margin="0"
-            ), className='rwa')
+                                    display="inline-block", width="1000px",
+                                    left="0", margin="0"
+                                    ), className='rwa')
         self.gw = gw
         self.size = size
         self.savedir = self.gw.cachedir if mask_dir is None else mask_dir
         self.original_model = copy.deepcopy(gw.model)
         self.request = {}
-        self.imgnum_textbox = labwidget.Textbox('0-%d' % (num_canvases-1)
-                ).on('value', self.change_numbers)
+        self.imgnum_textbox = labwidget.Textbox('0-%d' % (num_canvases - 1)
+                                                ).on('value', self.change_numbers)
         self.msg_out = labwidget.Div()
         self.loss_out = labwidget.Div()
         self.query_out = labwidget.Div()
         self.copy_canvas = paintwidget.PaintWidget(
-                image='', width=self.size * 0.75, height=self.size * 0.75
-                     ).on('mask', self.change_copy_mask)
+            image='', width=self.size * 0.75, height=self.size * 0.75
+        ).on('mask', self.change_copy_mask)
         self.paste_canvas = paintwidget.PaintWidget(
-                image='', width=self.size * 0.75, height=self.size * 0.75,
-                opacity=0.0, oneshot=True,
-                     ).on('mask', self.change_paste_mask)
+            image='', width=self.size * 0.75, height=self.size * 0.75,
+            opacity=0.0, oneshot=True,
+        ).on('mask', self.change_paste_mask)
         self.object_out = labwidget.Div(
-                style={'display': 'inline-block',
-                    'vertical-align': 'top',
-                    'width': '%spx' % size,
-                    'height': '%spx' % size})
+            style={'display': 'inline-block',
+                   'vertical-align': 'top',
+                   'width': '%spx' % size,
+                   'height': '%spx' % size})
         self.target_out = labwidget.Div(
-                style={'display': 'inline-block',
-                    'vertical-align': 'top',
-                    'width': '%spx' % size,
-                    'height': '%spx' % size})
+            style={'display': 'inline-block',
+                   'vertical-align': 'top',
+                   'width': '%spx' % size,
+                   'height': '%spx' % size})
         self.context_out = labwidget.Div(
-                style={'display': 'inline-block',
-                    'vertical-align': 'top',
-                    'text-align': 'left',
-                    'width': '%spx' % ((size + 2) * 3 // 2),
-                    'height': '%spx' % (size * 3 // 8 + 20),
-                    'white-space': 'nowrap',
-                    'overflow-x': 'scroll'},
-                className='ctx_tray')
+            style={'display': 'inline-block',
+                   'vertical-align': 'top',
+                   'text-align': 'left',
+                   'width': '%spx' % ((size + 2) * 3 // 2),
+                   'height': '%spx' % (size * 3 // 8 + 20),
+                   'white-space': 'nowrap',
+                   'overflow-x': 'scroll'},
+            className='ctx_tray')
         self.context_img_array = []
         self.keytray_div = labwidget.Div(style={'display': 'none'})
         self.keytray_menu = labwidget.Menu(
-                ).on('selection', self.repaint_key_tray)
+        ).on('selection', self.repaint_key_tray)
         self.keytray_removebtn = labwidget.Button('remove'
-                ).on('click', self.keytray_remove)
+                                                  ).on('click', self.keytray_remove)
         self.keytray_showbtn = labwidget.Button('show'
-                ).on('click', self.keytray_show)
+                                                ).on('click', self.keytray_show)
         self.keytray_querybtn = labwidget.Button('query'
-                ).on('click', self.keytray_query)
+                                                 ).on('click', self.keytray_query)
         self.keytray_zerobtn = labwidget.Button('zero'
-                ).on('click', self.keytray_zero)
+                                                ).on('click', self.keytray_zero)
         self.keytray_canvas = paintwidget.PaintWidget(
-                width=self.size, height=self.size,
-                vanishing=False, disabled=True)
+            width=self.size, height=self.size,
+            vanishing=False, disabled=True)
         self.keytray_div.show([
             [
                 self.keytray_menu,
@@ -78,45 +80,45 @@ class GanRewriteApp(labwidget.Widget):
             [self.keytray_canvas]])
         inline = dict(display='inline')
         self.query_btn = labwidget.Button('Match Sel', style=inline
-                ).on('click', self.query)
+                                          ).on('click', self.query)
         self.context_querybtn = labwidget.Button('Search', style=inline
-                ).on('click', self.keytray_query)
+                                                 ).on('click', self.keytray_query)
         self.highlight_btn = labwidget.Button('Show Context Matches', style=inline
-                ).on('click', self.toggle_highlight)
+                                              ).on('click', self.toggle_highlight)
         self.original_btn = labwidget.Button('Toggle Original', style=inline
-                ).on('click', self.toggle_original)
+                                             ).on('click', self.toggle_original)
         self.object_btn = labwidget.Button('Copy', style=inline
-                ).on('click', self.pick_object)
+                                           ).on('click', self.pick_object)
         self.key_btn = labwidget.Button('Add to Context', style=inline
-                ).on('click', self.key_add)
+                                        ).on('click', self.key_add)
         self.paste_btn = labwidget.Button('Paste', style=inline
-                ).on('click', self.paste)
+                                          ).on('click', self.paste)
         self.snap_btn = labwidget.Button('Snap'
-                ).on('click', self.snapshot_images)
+                                         ).on('click', self.snapshot_images)
         self.brushsize_textbox = labwidget.Textbox(10, desc='brush: ', size=3
-                ).on('value', self.change_brushsize)
+                                                   ).on('value', self.change_brushsize)
         self.rank_textbox = labwidget.Textbox(
-                '1', desc='rank: ', size=4, style=inline)
+            '1', desc='rank: ', size=4, style=inline)
         self.paste_niter_textbox = labwidget.Textbox(
-                '2001', desc='paste niter: ', size=8)
+            '2001', desc='paste niter: ', size=8)
         self.paste_piter_textbox = labwidget.Textbox(
-                '10', desc='proj every: ', size=4)
+            '10', desc='proj every: ', size=4)
         self.paste_lr_textbox = labwidget.Textbox(
-                '0.05', desc='paste lr: ', size=8)
+            '0.05', desc='paste lr: ', size=8)
         self.erase_btn = labwidget.Button('Erase').on('click', self.exec_erase)
         self.exec_btn = labwidget.Button('Execute Change',
-                style=dict(display='inline', background='darkgreen')
-                ).on('click', self.exec_request)
+                                         style=dict(display='inline', background='darkgreen')
+                                         ).on('click', self.exec_request)
         self.overfit_btn = labwidget.Button('Overfit').on(
-                'click', self.exec_overfit)
+            'click', self.exec_overfit)
         self.revert_btn = labwidget.Button('Revert', style=inline
-                ).on('click', self.revert)
+                                           ).on('click', self.revert)
         self.saved_list = labwidget.Datalist(choices=self.saved_names(),
-                style=inline)
+                                             style=inline)
         self.load_btn = labwidget.Button('Load', style=inline
-                ).on('click', self.tryload)
+                                         ).on('click', self.tryload)
         self.save_btn = labwidget.Button('Save', style=inline
-                ).on('click', self.save)
+                                         ).on('click', self.save)
         self.sel = list(range(num_canvases))
         self.overwriting = True
         self.obj_acts = None
@@ -132,14 +134,14 @@ class GanRewriteApp(labwidget.Widget):
             self.canvas_array.append(paintwidget.PaintWidget(
                 image=renormalize.as_url(
                     self.gw.render_image(i)),
-                     # width=self.size * 3 // 4, height=self.size * 3 // 4
-                     width=self.size, height=self.size
-                     ).on('mask', self.change_mask))
+                # width=self.size * 3 // 4, height=self.size * 3 // 4
+                width=self.size, height=self.size
+            ).on('mask', self.change_mask))
             self.canvas_array[-1].index = i
             self.snap_image_array.append(
-                    labwidget.Image(style={'margin-top':0,
-                    'max-width':'%dpx' % self.size,
-                    'max-height':'%dpx' % self.size}))
+                labwidget.Image(style={'margin-top': 0,
+                                       'max-width': '%dpx' % self.size,
+                                       'max-height': '%dpx' % self.size}))
             self.snap_image_array[-1].index = i
         self.current_mask_item = None
 
@@ -163,7 +165,7 @@ class GanRewriteApp(labwidget.Widget):
         else:
             sel = int(self.keytray_menu.selection)
         self.keytray_canvas.image = renormalize.as_url(
-                    self.gw.render_image(sel, None))
+            self.gw.render_image(sel, None))
         self.keytray_canvas.mask = keymasks[sel]
 
     def repaint_key_tray(self):
@@ -175,18 +177,18 @@ class GanRewriteApp(labwidget.Widget):
         if len(self.context_img_array) < len(keymasks):
             while len(self.context_img_array) < len(keymasks):
                 self.context_img_array.append(
-                        labwidget.Image(style=dict(
-                            maxWidth='%spx' % int(self.size * 3 // 8),
-                            maxHeight='%spx' % int(self.size * 3 // 8),
-                            border='1 px solid white')).on(
-                                'click', self.click_context_img))
+                    labwidget.Image(style=dict(
+                        maxWidth='%spx' % int(self.size * 3 // 8),
+                        maxHeight='%spx' % int(self.size * 3 // 8),
+                        border='1 px solid white')).on(
+                        'click', self.click_context_img))
             self.context_out.show(*[[imgw] for imgw in self.context_img_array])
         for i, (imgnum, mask) in enumerate(keymasks.items()):
             imgw = self.context_img_array[i]
             area = (renormalize.from_url(mask, target='pt',
-                        size=self.gw.x_shape[2:])[0] > 0.25)
+                                         size=self.gw.x_shape[2:])[0] > 0.25)
             imgw.render(self.gw.render_image(imgnum, mask=area,
-                thickness=0, outside_bright=1.0, inside_color=[255, 255, 255]))
+                                             thickness=0, outside_bright=1.0, inside_color=[255, 255, 255]))
             imgw.imgnum = imgnum
         for i in range(len(keymasks), len(self.context_img_array)):
             self.context_img_array[i].src = ''
@@ -260,14 +262,14 @@ class GanRewriteApp(labwidget.Widget):
 
     def repaint_canvas_array(self):
         level = (self.query_rq.quantiles(0.999)[0]
-                if (self.query_vis and self.query_rq) else None)
+                 if (self.query_vis and self.query_rq) else None)
         if self.show_original:
             saved_state_dict = copy.deepcopy(self.gw.model.state_dict())
             with torch.no_grad():
                 self.gw.model.load_state_dict(self.original_model.state_dict())
         images = self.gw.render_image_batch(self.sel,
-                self.query_key if self.query_vis else None, level,
-                        border_color=[255,255,255])
+                                            self.query_key if self.query_vis else None, level,
+                                            border_color=[255, 255, 255])
         if self.show_original:
             with torch.no_grad():
                 self.gw.model.load_state_dict(saved_state_dict)
@@ -294,9 +296,10 @@ class GanRewriteApp(labwidget.Widget):
             try:
                 bottom = int(p[0])
                 top = int(p[1]) if len(p) > 1 else bottom
-                sel.extend([i for i in range(bottom, top+1)
-                    if 0 <= i < len(self.gw.zds)])
+                sel.extend([i for i in range(bottom, top + 1)
+                            if 0 <= i < len(self.gw.zds)])
             except Exception as e:
+                print('Exception {}'.format(e))
                 pass
             if len(sel) >= len(self.canvas_array):
                 sel = sel[:len(self.canvas_array)]
@@ -358,8 +361,7 @@ class GanRewriteApp(labwidget.Widget):
 
     def query(self):
         if self.overwriting or 'query' not in self.request:
-            if (self.current_mask_item is None
-                    or not self.canvas_array[self.current_mask_item].mask):
+            if self.current_mask_item is None or not self.canvas_array[self.current_mask_item].mask:
                 return
             imgnum = self.sel[self.current_mask_item]
             mask = self.canvas_array[self.current_mask_item].mask
@@ -373,8 +375,7 @@ class GanRewriteApp(labwidget.Widget):
             if 'query' in self.request:
                 imgnum, mask = self.request['query']
             else:
-                if (self.current_mask_item is None
-                        or not self.canvas_array[self.current_mask_item].mask):
+                if self.current_mask_item is None or not self.canvas_array[self.current_mask_item].mask:
                     return
                 imgnum = self.sel[self.current_mask_item]
                 mask = self.canvas_array[self.current_mask_item].mask
@@ -404,8 +405,7 @@ class GanRewriteApp(labwidget.Widget):
 
     def pick_object(self):
         if self.overwriting or 'object' not in self.request:
-            if (self.current_mask_item is None
-                    or not self.canvas_array[self.current_mask_item].mask):
+            if self.current_mask_item is None or not self.canvas_array[self.current_mask_item].mask:
                 return
             imgnum = self.sel[self.current_mask_item]
             mask = self.canvas_array[self.current_mask_item].mask
@@ -413,26 +413,21 @@ class GanRewriteApp(labwidget.Widget):
         self.exec_object()
 
     def exec_object(self, obj_acts=None, obj_area=None, obj_output=None,
-            bounds=None):
+                    bounds=None):
         if obj_acts is None:
             imgnum, mask = self.request['object']
             obj_acts, obj_output, obj_area, bounds = (
-                    self.gw.object_from_selection(imgnum, mask))
+                self.gw.object_from_selection(imgnum, mask))
         if obj_area is None:
             obj_area = torch.ones(obj_acts.shape[2:], device=obj_acts.device)
             mask = None
         self.obj_acts, self.obj_area = obj_acts, obj_area
-        highest_channel = obj_acts.max(3)[0].max(2)[0].max(1)[1].item()
         cropped_out = self.gw.merge_target_output(obj_output, obj_acts, bounds)
         imgout = self.gw.render_object(cropped_out, obj_area)
-        iv = imgviz.ImageVisualizer((imgout.height, imgout.width))
-        # self.object_out.show(self.request_mask(thickness=3))
+        imgviz.ImageVisualizer((imgout.height, imgout.width))
         self.copy_canvas.image = renormalize.as_url(
-                self.request_mask(thickness=3))
+            self.request_mask(thickness=3))
         self.copy_canvas.mask = mask
-        # self.object_out.show(
-        #         ['value (from %d):' % imgnum, [imgout],
-        #         [iv.heatmap(obj_acts[0, highest_channel], mode='nearest')]])
         self.show_msg('picked object')
 
     def request_mask(self, field='object', index=None, **kwargs):
@@ -448,7 +443,7 @@ class GanRewriteApp(labwidget.Widget):
         else:
             imgnum, mask = self.request[field]
         area = (renormalize.from_url(mask, target='pt',
-                            size=self.gw.x_shape[2:])[0] > 0.25)
+                                     size=self.gw.x_shape[2:])[0] > 0.25)
         imgout = self.gw.render_image(imgnum, mask=area, **kwargs)
         return imgout
 
@@ -478,13 +473,9 @@ class GanRewriteApp(labwidget.Widget):
     def exec_paste(self):
         imgnum, mask = self.request['paste']
         goal_in, goal_out, viz_out, bounds = self.gw.paste_from_selection(
-                    imgnum, mask, self.obj_acts, self.obj_area)
+            imgnum, mask, self.obj_acts, self.obj_area)
         self.paste_canvas.image = renormalize.as_url(
             self.gw.render_object(viz_out, box=bounds))
-        # self.target_out.show([
-        #     'goal (in %d):' % imgnum,
-        #     [self.gw.render_object(self.gw.target_model(goal_in))],
-        #     [self.gw.render_object(goal_out)]])
 
     def exec_erase(self):
         if 'paste' not in self.request:
@@ -498,14 +489,15 @@ class GanRewriteApp(labwidget.Widget):
         niter = int(self.paste_niter_textbox.value)
         piter = int(self.paste_piter_textbox.value)
         lr = float(self.paste_lr_textbox.value)
+
         def update_callback(it, loss):
             if it % 50 == 0 or it == niter - 1:
                 loss_info = (f'lr {lr:.4f}\titer {it: 6d}/{niter: 6d}'
                              f'\tloss {loss.item():.4f}')
                 self.loss_out.print(loss_info, replace=True)
         self.gw.apply_erase(self.request,
-                rank=rank, drank=30, niter=niter, piter=piter, lr=lr,
-                update_callback=update_callback)
+                            rank=rank, drank=30, niter=niter, piter=piter, lr=lr,
+                            update_callback=update_callback)
         self.repaint_canvas_array()
         self.show_msg(f'erased from model')
 
@@ -521,14 +513,15 @@ class GanRewriteApp(labwidget.Widget):
         niter = int(self.paste_niter_textbox.value)
         piter = int(self.paste_piter_textbox.value)
         lr = float(self.paste_lr_textbox.value)
+
         def update_callback(it, loss):
             if it % 50 == 0 or it == niter - 1:
                 loss_info = (f'lr {lr:.4f}\titer {it: 6d}/{niter: 6d}'
                              f'\tloss {loss.item():.4f}')
                 self.loss_out.print(loss_info, replace=True)
         self.gw.apply_edit(self.request,
-                rank=rank, niter=niter, piter=piter, lr=lr,
-                update_callback=update_callback)
+                           rank=rank, niter=niter, piter=piter, lr=lr,
+                           update_callback=update_callback)
         self.show_original = False
         self.repaint_canvas_array()
         self.show_msg(f'pasted into model')
@@ -543,13 +536,14 @@ class GanRewriteApp(labwidget.Widget):
         self.show_msg('overfitting model...')
         niter = int(self.paste_niter_textbox.value)
         lr = float(self.paste_lr_textbox.value)
+
         def update_callback(it, loss):
             if it % 50 == 0 or it == niter - 1:
                 loss_info = (f'lr {lr:.4f}\titer {it: 6d}/{niter: 6d}'
                              f'\tloss {loss.item():.4f}')
                 self.loss_out.print(loss_info, replace=True)
         self.gw.apply_overfit(self.request,
-                niter=niter, lr=lr, update_callback=update_callback)
+                              niter=niter, lr=lr, update_callback=update_callback)
         self.repaint_canvas_array()
         self.show_msg(f'overfitted into model')
 
@@ -566,13 +560,12 @@ class GanRewriteApp(labwidget.Widget):
         if self.saved_list.value in self.saved_list.choices:
             self.show_msg('loading edit...')
             self.load_from_name(self.saved_list.value)
-            self.show_msg('loaded from ' + self.saved_list.value +
-                    '; exec to execute model change.')
+            self.show_msg('loaded from ' + self.saved_list.value + '; exec to execute model change.')
 
     def saved_names(self):
         os.makedirs(self.savedir, exist_ok=True)
         return sorted([name[:-5] for name in os.listdir(self.savedir)
-                      if name.endswith('.json')])
+                       if name.endswith('.json')])
 
     def save_as_name(self, name):
         data = self.request
@@ -694,77 +687,6 @@ class GanRewriteApp(labwidget.Widget):
         {h(self.msg_out)}
         </div>'''
 
-#    def old_widget_html(self):
-#        def h(w):
-#            return w._repr_html_()
-#        return f'''<div {self.std_attrs()}>
-#        <div>Image Browser {h(self.imgnum_textbox)}
-#        {h(self.query_btn)}
-#        {h(self.highlight_btn)}
-#        {h(self.original_btn)}
-#        </div>
-#        <div style="height:{self.size}px; width:{(self.size + 2) * 3 + 20}px;
-#              margin-top:8px;overflow-y: scroll">
-#        {show.html([[c] for c in self.canvas_array])}
-#        </div>
-#
-#        <div style="width:{(self.size + 2) * 3 + 20}px;">
-#        <hr style="border:2px dashed gray; background-color: white">
-#        </div>
-#
-#        <div style="margin-top: 8px; margin-bottom: 8px;">
-#        <div style="display:inline-block; width:{self.size+2}px;
-#          text-align:center">
-#        {h(self.object_btn)}
-#        </div>
-#        <div style="display:inline-block; width:{self.size+2}px;
-#          text-align:center">
-#        {h(self.paste_btn)}
-#        </div>
-#        <div style="display:inline-block; width:{self.size+2}px;
-#          text-align:center">
-#        {h(self.key_btn)}
-#        </div>
-#        </div>
-#
-#        <div>
-#        <div style="display:inline-block;
-#          width:{self.size}px;
-#          height:{self.size}px;
-#          vertical-align:top;
-#          text-align:center">{h(self.copy_canvas)}</div>
-#        <div style="display:inline-block;
-#          width:{self.size}px;
-#          height:{self.size}px;
-#          vertical-align:top;
-#          text-align:center">{h(self.paste_canvas)}</div>
-#        {h(self.context_out)}
-#        </div>
-#
-#        <div style="width:{(self.size + 2) * 3 + 20}px;">
-#        <hr style="border:2px dashed gray; background-color: white">
-#        </div>
-#
-#        <div style="width:{(self.size + 2) * 3 + 20}px; text-align: center;
-#           margin-top:8px;">
-#        {h(self.exec_btn)}
-#        {h(self.rank_textbox)}
-#        {h(self.paste_lr_textbox)}
-#        {h(self.revert_btn)}
-#        &nbsp;
-#        {h(self.context_querybtn)}
-#        &nbsp;
-#        {h(self.saved_list)}
-#        {h(self.load_btn)}
-#        {h(self.save_btn)}
-#        </div>
-#
-#        {h(self.loss_out)}
-#        {h(self.msg_out)}
-#        </div>'''
-#
-
-
 
 ##########################################################################
 # Utility functions
@@ -775,32 +697,34 @@ def positive_bounding_box(data):
     v, h = pos.sum(0).nonzero(), pos.sum(1).nonzero()
     left, right = v.min().item(), v.max().item()
     top, bottom = h.min().item(), h.max().item()
-    return top, left, bottom+1, right+1
+    return top, left, bottom + 1, right + 1
+
 
 def centered_location(data):
-    t,l,b,r = positive_bounding_box(data)
+    t, l, b, r = positive_bounding_box(data)
     return (t + b) // 2, (l + r) // 2
+
 
 def paste_clip_at_center(source, clip, center, area=None):
     target = source.clone()
     # clip = clip[:,:,:target.shape[2],:target.shape[3]]
     t, l = (max(0, min(e - s, c - s // 2))
             for s, c, e in zip(clip.shape[2:], center, source.shape[2:]))
-    b, r = t+clip.shape[2],l+clip.shape[3]
+    b, r = t + clip.shape[2], l + clip.shape[3]
     # TODO: consider copying over a subset of channels.
-    target[:,:,t:b,l:r] = clip if area is None else (
-            (1 - area)[None,None,:,:].to(target.device) *
-            target[:,:,t:b,l:r] +
-            area[None,None,:,:].to(target.device) * clip)
+    target[:, :, t:b, l:r] = clip if area is None else (
+        (1 - area)[None, None, :, :].to(target.device) * target[:, :, t:b, l:r] + area[None, None, :, :].to(target.device) * clip)
     return target, (t, l, b, r)
+
 
 def crop_clip_to_bounds(source, target, bounds):
     t, l, b, r = bounds
     vr, hr = [ts // ss for ts, ss in zip(target.shape[2:], source.shape[2:])]
     st, sl, sb, sr = t // vr, l // hr, -(-b // vr), -(-r // hr)
     tt, tl, tb, tr = st * vr, sl * hr, sb * vr, sr * hr
-    cs, ct = source[:,:,st:sb,sl:sr], target[:,:,tt:tb,tl:tr]
+    cs, ct = source[:, :, st:sb, sl:sr], target[:, :, tt:tb, tl:tr]
     return cs, ct, (st, sl, sb, sr), (tt, tl, tb, tr)
+
 
 def projected_conv(weight, direction):
     if len(weight.shape) == 5:
@@ -811,13 +735,15 @@ def projected_conv(weight, direction):
         result = torch.einsum('odyx, di -> oiyx', cosine_map, direction)
     return result
 
+
 def rank_one_conv(weight, direction):
-    cosine_map = (weight * direction[None,:,None,None]).sum(1, keepdim=True)
-    return cosine_map * direction[None,:,None,None]
+    cosine_map = (weight * direction[None, :, None, None]).sum(1, keepdim=True)
+    return cosine_map * direction[None, :, None, None]
+
 
 def zca_from_cov(cov):
     evals, evecs = torch.symeig(cov.double(), eigenvectors=True)
     zca = torch.mm(torch.mm(evecs, torch.diag
-        (evals.sqrt().clamp(1e-20).reciprocal())),
-        evecs.t()).to(cov.dtype)
+                            (evals.sqrt().clamp(1e-20).reciprocal())),
+                   evecs.t()).to(cov.dtype)
     return zca

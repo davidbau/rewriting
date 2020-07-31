@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+set -ex
 # Start from directory of script
 cd "$(dirname "$(readlink -f "$0")")"
 
@@ -17,4 +17,3 @@ python -m metrics.make_watermark_images \
 
 python -m metrics.make_watermark_images \
    --erasemethod none
-

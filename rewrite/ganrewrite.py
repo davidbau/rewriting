@@ -1,13 +1,17 @@
-import copy, os, torch, json, random, time
+import copy
+import os
+import torch
+import json
+import random
+import time
 from utils import nethook, renormalize, pbar, tally, imgviz
 from utils import show, labwidget, paintwidget
-from collections import OrderedDict, defaultdict
-from torch.nn import functional as F
+from collections import OrderedDict
 import torchvision
 
 
 (all_obs, all_weight, all_CinvK, all_kCinvK, e_val, e_vec, kbasis,
-        row_dirs, q) = (None, None, None, None, None, None ,None, None, None)
+ row_dirs, q) = (None, None, None, None, None, None, None, None, None)
 
 ##########################################################################
 # Algorithm
@@ -16,16 +20,17 @@ import torchvision
 # This base class is designed to rewrite a layer of a Progressive GAN.
 # A subclass of this class is used for StyleGAN.
 
+
 class ProgressiveGanRewriter(object):
     def __init__(self, model, zds, layernum,
-            cachedir=None,
-            low_rank_insert=True, # Restrict insert to low rank context.
-            low_rank_gradient=False, # Restrict gradient to low rank
-            use_linear_insert=False, # Use linear insert
-            tight_paste=True, # Paste to optimize over crop (vs whole image)
-            alpha_area=True,  # Target composites drawn area (vs boundrect)
-            key_method='zca' # Other options: 'svd', 'gandissect'
-            ):
+                 cachedir=None,
+                 low_rank_insert=True,  # Restrict insert to low rank context.
+                 low_rank_gradient=False,  # Restrict gradient to low rank
+                 use_linear_insert=False,  # Use linear insert
+                 tight_paste=True,  # Paste to optimize over crop (vs whole image)
+                 alpha_area=True,  # Target composites drawn area (vs boundrect)
+                 key_method='zca'  # Other options: 'svd', 'gandissect'
+                 ):
         self.firstlayer, self.lastlayer = self.maplayers(layernum)
         self.cachedir = cachedir
         self.tight_paste = tight_paste
@@ -41,16 +46,16 @@ class ProgressiveGanRewriter(object):
         self.zds = zds
         self.model = copy.deepcopy(model)
         self.context_model = nethook.subsequence(
-                self.model, upto_layer=self.firstlayer,
-                share_weights=True)
+            self.model, upto_layer=self.firstlayer,
+            share_weights=True)
         self.target_model = nethook.subsequence(
-                self.model,
-                first_layer=self.firstlayer,
-                last_layer=self.lastlayer,
-                share_weights=True)
+            self.model,
+            first_layer=self.firstlayer,
+            last_layer=self.lastlayer,
+            share_weights=True)
         self.rendering_model = nethook.subsequence(
-                self.model, after_layer=self.lastlayer,
-                share_weights=True)
+            self.model, after_layer=self.lastlayer,
+            share_weights=True)
         with torch.no_grad():
             sample_z = self.get_z(0)
             sample_k = self.context_model(sample_z)
@@ -72,7 +77,7 @@ class ProgressiveGanRewriter(object):
 
     def maplayers(self, layernum):
         first = 'layer%d.conv' % layernum
-        last =  'layer%d.conv' % layernum
+        last = 'layer%d.conv' % layernum
         return first, last
 
     def collect_2nd_moment(self):
@@ -80,14 +85,14 @@ class ProgressiveGanRewriter(object):
         Computes or loads cached uncentered covariance stats from r2m.npz.
         Returns the inverse of the matrix.
         '''
-        with torch.no_grad(), pbar.quiet(): # quiet perhaps.
+        with torch.no_grad(), pbar.quiet():  # quiet perhaps.
             def separate_key_reps(zbatch):
                 acts = self.context_acts(
-                        self.context_model(zbatch.to(self.device)))
+                    self.context_model(zbatch.to(self.device)))
                 sep_pix = acts.permute(0, 2, 3, 1).reshape(-1, acts.shape[1])
                 return sep_pix
             r2m = tally.tally_second_moment(separate_key_reps, self.zds,
-                    cachefile=self.rf('r2m.npz'))
+                                            cachefile=self.rf('r2m.npz'))
             return r2m.moment()
 
     def covariance_adjusted_key(self, k, kout):
@@ -96,12 +101,12 @@ class ProgressiveGanRewriter(object):
     def covariance_adjusted_query_key(self, k):
         # Returns C^{-1}k, computing it more stably than literally inverting C.
         if len(k.shape) == 1:
-            return torch.lstsq(k[:,None], self.c_matrix)[0][:,0]
+            return torch.lstsq(k[:, None], self.c_matrix)[0][:, 0]
         return torch.lstsq(k.permute(1, 0), self.c_matrix)[0].permute(1, 0)
 
     def zca_whitened_query_key(self, k):
         if len(k.shape) == 1:
-            return torch.mm(self.zca_matrix, k[:,None])[:,0]
+            return torch.mm(self.zca_matrix, k[:, None])[:, 0]
         return torch.mm(self.zca_matrix, k.permute(1, 0)).permute(1, 0)
 
     def context_acts(self, context_out):
@@ -151,20 +156,20 @@ class ProgressiveGanRewriter(object):
         return self.zds[imgnum][0][None].to(self.device)
 
     def apply_erase(self, request, rank=1, drank=30,
-            niter=2001, piter=10, lr=0.05, update_callback=None):
+                    niter=2001, piter=10, lr=0.05, update_callback=None):
         '''Applies the editing specified in the JSON record, same
         format as saved by the UI.'''
         p_imgnum, p_mask = request['paste']
         key_examples = request.get('key', [(p_imgnum, p_mask)])
         goal_in, goal_out = self.erase_from_selection(
-                    p_imgnum, p_mask, key_examples, drank)
+            p_imgnum, p_mask, key_examples, drank)
         mkey = self.multi_key_from_selection(key_examples, rank=rank)
         self.insert(goal_in, goal_out, mkey,
-                       update_callback=update_callback,
-                       niter=niter, piter=piter, lr=lr)
+                    update_callback=update_callback,
+                    niter=niter, piter=piter, lr=lr)
 
     def apply_edit(self, request, rank=1, niter=2001, piter=10, lr=0.05,
-            update_callback=None, single_key=-1):
+                   update_callback=None, single_key=-1):
         '''Applies the editing specified in the JSON record, same
         format as saved by the UI.
 
@@ -178,58 +183,58 @@ class ProgressiveGanRewriter(object):
             print('Using only key', single_key, 'out of a total', len(key_examples))
             key_examples = [key_examples[single_key]]
         obj_acts, obj_output, obj_area, bounds = (
-                    self.object_from_selection(o_imgnum, o_mask))
+            self.object_from_selection(o_imgnum, o_mask))
         goal_in, goal_out, _, _ = self.paste_from_selection(
-                    p_imgnum, p_mask, obj_acts, obj_area)
+            p_imgnum, p_mask, obj_acts, obj_area)
         mkey = self.multi_key_from_selection(key_examples, rank=rank)
         return self.insert(goal_in, goal_out, mkey,
-                       update_callback=update_callback,
-                       niter=niter, piter=piter, lr=lr)
+                           update_callback=update_callback,
+                           niter=niter, piter=piter, lr=lr)
 
     def apply_overfit(self, request, niter=20001, lr=0.01,
-            update_callback=None):
+                      update_callback=None):
         '''Applies the editing specified in the JSON record, same
         format as saved by the UI.'''
         o_imgnum, o_mask = request['object']
         p_imgnum, p_mask = request['paste']
         rgb_clip, _, obj_area, _ = self.rgb_from_selection(o_imgnum, o_mask)
         host_z, changed_rgb, bounds = self.rgbpaste_from_selection(
-                p_imgnum, p_mask, rgb_clip, obj_area)
+            p_imgnum, p_mask, rgb_clip, obj_area)
         self.all_weights_insert(changed_rgb, host_z, bounds=bounds,
-                update_callback=update_callback, niter=niter, lr=lr)
+                                update_callback=update_callback, niter=niter, lr=lr)
 
     def all_weights_insert(self, x, z, bounds=None, update_callback=None,
-               niter=20001, lr=0.01):
+                           niter=20001, lr=0.01):
 
         obj_acts, obj_output, obj_area, bounds = (
-                    self.object_from_selection(o_imgnum, o_mask))
+            self.object_from_selection(o_imgnum, o_mask))
         goal_in, goal_out = self.paste_from_selection(
-                    p_imgnum, p_mask, obj_acts, obj_area)
+            p_imgnum, p_mask, obj_acts, obj_area)
         mkey = self.multi_key_from_selection(key_examples, rank=rank)
         self.insert(goal_in, goal_out, mkey,
-                       update_callback=update_callback,
-                       niter=niter, piter=piter, lr=lr)
+                    update_callback=update_callback,
+                    niter=niter, piter=piter, lr=lr)
 
     def detach(self, v):
         return v.detach()
 
     def target_weights(self):
         return [p for n, p in self.target_model.named_parameters()
-                  if 'weight' in n][0]
+                if 'weight' in n][0]
 
     def zero(self, context, amount=0.0):
         weight = self.target_weights()
         with torch.no_grad():
             ortho_weight = weight - projected_conv(weight, context)
             weight[...] = ortho_weight + (
-                    amount * projected_conv(torch.ones_like(weight), context))
+                amount * projected_conv(torch.ones_like(weight), context))
 
         def compute_loss():
             return torch.nn.functional.l1_loss(self.target_acts(val),
-                    self.target_acts(self.target_model(key)))
+                                               self.target_acts(self.target_model(key)))
 
     def linear_insert(self, key, val, context=None, update_callback=None,
-               niter=2001, lr=0.05, return_timing=False):
+                      niter=2001, lr=0.05, return_timing=False):
         if return_timing:
             torch.cuda.synchronize()
             st = time.time()
@@ -237,18 +242,18 @@ class ProgressiveGanRewriter(object):
         key, val = [self.detach(d) for d in [key, val]]
         original_weight = self.target_weights()
         hooked_module = [module for module in self.target_model.modules()
-                if getattr(module, 'weight', None) is original_weight][0]
+                         if getattr(module, 'weight', None) is original_weight][0]
         del hooked_module._parameters['weight']
         ws = original_weight.shape
         lambda_param = torch.zeros(
-                 ws[0], ws[1], context.shape[0],
-                 ws[3], ws[4], device=original_weight.device,
-                 requires_grad=True)
+            ws[0], ws[1], context.shape[0],
+            ws[3], ws[4], device=original_weight.device,
+            requires_grad=True)
         old_forward = hooked_module.forward
+
         def new_forward(x):
             # weight_1 = weight_0 + Lambda D
-            hooked_module.weight = (original_weight
-                        + torch.einsum('godyx, di -> goiyx', lambda_param, context))
+            hooked_module.weight = (original_weight + torch.einsum('godyx, di -> goiyx', lambda_param, context))
             result = old_forward(x)
             return result
         hooked_module.forward = new_forward
@@ -256,7 +261,7 @@ class ProgressiveGanRewriter(object):
         # when computing the loss, hook the weights to be modified by Lambda D
         def compute_loss():
             loss = torch.nn.functional.l1_loss(self.target_acts(val),
-                    self.target_acts(self.target_model(key)))
+                                               self.target_acts(self.target_model(key)))
             return loss
 
         # run the optimizer
@@ -272,31 +277,31 @@ class ProgressiveGanRewriter(object):
                     update_callback(it, loss)
         with torch.no_grad():
             # OK now fill in the learned weights and undo the hook.
-            original_weight[...] = (original_weight
-                    + torch.einsum('godyx, di -> goiyx', lambda_param, context))
+            original_weight[...] = (original_weight + torch.einsum('godyx, di -> goiyx', lambda_param, context))
             del hooked_module.weight
             hooked_module.register_parameter('weight', original_weight)
             hooked_module.forward = old_forward
         if return_timing:
             torch.cuda.synchronize()
             et = time.time()
-            return (et - st)*1000
+            return (et - st) * 1000
 
     def insert(self, key, val, context=None, update_callback=None,
                niter=2001, piter=10, lr=0.05, return_timing=False):
         if self.use_linear_insert:
             return self.linear_insert(key, val, context,
-                    update_callback=update_callback,
-                    niter=niter, lr=lr,
-                    return_timing=return_timing)
+                                      update_callback=update_callback,
+                                      niter=niter, lr=lr,
+                                      return_timing=return_timing)
         if return_timing:
             torch.cuda.synchronize()
             st = time.time()
         # print('inserting keys %s' % list(key.keys()))
         key, val = [self.detach(d) for d in [key, val]]
+
         def compute_loss():
             return torch.nn.functional.l1_loss(self.target_acts(val),
-                    self.target_acts(self.target_model(key)))
+                                               self.target_acts(self.target_model(key)))
         # set up optimizer
         weight = self.target_weights()
         params = [weight]
@@ -318,36 +323,36 @@ class ProgressiveGanRewriter(object):
                 if update_callback is not None:
                     update_callback(it, loss)
                 # Project to rank-one over context direction
-                if self.low_rank_insert and (it % piter == 0 or it == niter-1):
+                if self.low_rank_insert and (it % piter == 0 or it == niter - 1):
                     with torch.no_grad():
                         weight[...] = (
-                                ortho_weight + projected_conv(weight, context))
+                            ortho_weight + projected_conv(weight, context))
         if return_timing:
             torch.cuda.synchronize()
             et = time.time()
-            return (et - st)*1000
+            return (et - st) * 1000
 
     def all_weights_insert(self, x, z, bounds=None, update_callback=None,
-               niter=20001, lr=0.01):
+                           niter=20001, lr=0.01):
         x, z = [self.detach(d) for d in [x, z]]
         vgg = torchvision.models.vgg16(pretrained=True)
         VF = nethook.subsequence(vgg.features, last_layer='20').to(x.device)
+
         def compute_loss():
             out = self.model(z)
             if bounds is None:
                 gt, pred = x, out
             else:
                 t, l, b, r = bounds
-                gt, pred = [d[:,:,t:b,l:r] for d in [x, out]]
+                gt, pred = [d[:, :, t:b, l:r] for d in [x, out]]
             # Regularizing like this doesn't really help.
             # reg = 1e+2 * sum(torch.nn.functional.l1_loss(
             #   orig_p, cur_p) for (orig_p, cur_p) in zip(orig_params, params))
             return torch.nn.functional.l1_loss(gt, pred) + (
-                    1e-2 * torch.nn.functional.mse_loss(VF(gt), VF(pred)))
+                1e-2 * torch.nn.functional.mse_loss(VF(gt), VF(pred)))
         # set up optimizer
         nethook.set_requires_grad(False, self.model)
         params = list(self.model.parameters())
-        orig_params = [p.detach().clone() for p in params]
         nethook.set_requires_grad(True, *params)
         optimizer = torch.optim.Adam(params, lr=lr)
 
@@ -361,7 +366,7 @@ class ProgressiveGanRewriter(object):
                     update_callback(it, loss)
 
     def multi_key_from_selection(self, imgnum_mask_pairs, rank=1,
-            key_method=None):
+                                 key_method=None):
         global all_obs, all_weight, all_CinvK, all_kCinvK, e_val, e_vec, kbasis, row_dirs, q
         if key_method is None:
             key_method = self.key_method
@@ -372,23 +377,23 @@ class ProgressiveGanRewriter(object):
                     k_outs = self.context_model(self.get_z(imgnum))
                     k_acts = self.context_acts(k_outs)
                     area = renormalize.from_url(mask, target='pt',
-                            size=self.k_shape[2:])[0]
+                                                size=self.k_shape[2:])[0]
                     accumulated_obs.append((
                         k_acts.permute(0, 2, 3, 1).reshape(-1, k_acts.shape[1]),
                         k_outs,
-                        area.view(-1)[:,None].to(k_acts.device)))
-                all_obs = torch.cat([obs[(w > 0).nonzero()[:,0], :]
-                    for obs, _, w  in accumulated_obs])
+                        area.view(-1)[:, None].to(k_acts.device)))
+                all_obs = torch.cat([obs[(w > 0).nonzero()[:, 0], :]
+                                     for obs, _, w in accumulated_obs])
                 all_weight = torch.cat([w[w > 0]
-                    for _, _, w in accumulated_obs])
+                                        for _, _, w in accumulated_obs])
                 all_zca_k = torch.cat([
                     (w * self.zca_whitened_query_key(obs)
-                        )[(w > 0).nonzero()[:, 0], :]
+                     )[(w > 0).nonzero()[:, 0], :]
                     for obs, outs, w in accumulated_obs])
                 # all_zca_k is already transposed
                 _, _, q = all_zca_k.svd(compute_uv=True)
                 # Get the top rank e_vecs in whitened space
-                top_e_vec = q[:,:rank]
+                top_e_vec = q[:, :rank]
                 # Transform them into rowspace. (Same as multiplying
                 # by ZCA matrix a 2nd time.)
                 row_dirs = self.zca_whitened_query_key(top_e_vec.t())
@@ -396,7 +401,7 @@ class ProgressiveGanRewriter(object):
                 # Orthogonalize row_dirs
                 q, r = torch.qr(row_dirs.permute(1, 0))
                 # Flip the first eigenvec to agree with avg direction.
-                signs = (q * just_avg[:,None]).sum(0).sign()
+                signs = (q * just_avg[:, None]).sum(0).sign()
                 q = q * signs[None, :]
                 return q.permute(1, 0)
             if key_method == 'gandissect':
@@ -409,20 +414,19 @@ class ProgressiveGanRewriter(object):
                     k_outs = self.context_model(self.get_z(imgnum))
                     k_acts = self.context_acts(k_outs)
                     area = renormalize.from_url(mask, target='pt',
-                            size=self.k_shape[2:])[0]
+                                                size=self.k_shape[2:])[0]
                     accumulated_obs.append((
                         k_acts.permute(0, 2, 3, 1).reshape(-1, k_acts.shape[1]),
-                        area.view(-1)[:,None].to(k_acts.device)))
+                        area.view(-1)[:, None].to(k_acts.device)))
                 all_obs = torch.cat([obs for obs, _ in accumulated_obs])
                 all_weight = torch.cat([w for _, w in accumulated_obs])
                 rq = self.quantiles_for_units()
                 all_logscore = -torch.log(
-                        1.0 - rq.normalize(all_obs.permute(1, 0))).permute(1, 0)
-                mean_logscore = ((all_logscore * all_weight).sum(0)
-                        / sum(all_weight))
+                    1.0 - rq.normalize(all_obs.permute(1, 0))).permute(1, 0)
+                mean_logscore = ((all_logscore * all_weight).sum(0) / sum(all_weight))
                 top_coords = mean_logscore.sort(descending=True)[1][:rank]
                 result = torch.zeros(rank, all_obs.shape[1],
-                        device=all_obs.device)
+                                     device=all_obs.device)
                 result[torch.arange(rank), top_coords] = 1.0
                 # print('top_coords', top_coords.tolist())
                 return result
@@ -433,24 +437,24 @@ class ProgressiveGanRewriter(object):
                 k_outs = self.context_model(self.get_z(imgnum))
                 k_acts = self.context_acts(k_outs)
                 area = renormalize.from_url(mask, target='pt',
-                        size=self.k_shape[2:])[0]
+                                            size=self.k_shape[2:])[0]
                 weighted_k = (k_acts[0] * area[None].to(self.device)
-                        ).permute(1, 2, 0).view(-1, k_acts.shape[1])
+                              ).permute(1, 2, 0).view(-1, k_acts.shape[1])
                 nonzero_k = weighted_k[weighted_k.norm(2, dim=1) > 0]
                 accumulated_k.append((nonzero_k, k_outs))
             all_k = torch.cat([self.covariance_adjusted_key(nonzero_k, k_outs)
-                    for nonzero_k, k_outs in accumulated_k])
+                               for nonzero_k, k_outs in accumulated_k])
             just_avg = all_k.mean(0)
             if key_method == 'mean':
                 assert rank == 1
-                return just_avg[None,:] / just_avg.norm()
-            u, s, v = torch.svd(all_k.permute(1,0), some=False)
-            if (just_avg * u[:,0]).sum() < 0:
+                return just_avg[None, :] / just_avg.norm()
+            u, s, v = torch.svd(all_k.permute(1, 0), some=False)
+            if (just_avg * u[:, 0]).sum() < 0:
                 # Flip the first singular vectors to agree with avg direction
-                u[:,0] = -u[:,0]
-                v[:,0] = -v[:,0]
+                u[:, 0] = -u[:, 0]
+                v[:, 0] = -v[:, 0]
             assert u.shape[1] >= rank
-            return u.permute(1,0)[:rank]
+            return u.permute(1, 0)[:rank]
 
     def query_key_from_selection(self, imgnum, mask):
         area = renormalize.from_url(mask, target='pt', size=self.k_shape[2:])[0]
@@ -458,7 +462,7 @@ class ProgressiveGanRewriter(object):
             k_outs = self.context_model(self.get_z(imgnum))
             k_acts = self.context_acts(k_outs)
             mean = (k_acts[0] * area[None].to(self.device)
-                ).sum(2).sum(1) / (1e-10+area.sum())
+                    ).sum(2).sum(1) / (1e-10 + area.sum())
         # Old version: zeroed all but top 100 components of k; and
         # also omit channel 418!!  Here we just omit 418.
         # TODO: does it work without the blacklist?
@@ -478,10 +482,10 @@ class ProgressiveGanRewriter(object):
             k_output = self.context_model(self.get_z(imgnum))
             v_output = self.target_model(k_output)
             v_acts = self.target_acts(v_output)
-        t,l,b,r = positive_bounding_box(area)
-        obj_activations = v_acts[:,:,t:b,l:r]
-        obj_area = area[t:b,l:r]
-        return obj_activations, v_output, obj_area, (t,l,b,r)
+        t, l, b, r = positive_bounding_box(area)
+        obj_activations = v_acts[:, :, t:b, l:r]
+        obj_area = area[t:b, l:r]
+        return obj_activations, v_output, obj_area, (t, l, b, r)
 
     def normdissect_units(self, imgnum_mask_pairs, rank):
         with torch.no_grad():
@@ -490,30 +494,29 @@ class ProgressiveGanRewriter(object):
                 k_outs = self.context_model(self.get_z(imgnum))
                 k_acts = self.context_acts(k_outs)
                 area = renormalize.from_url(mask, target='pt',
-                        size=self.k_shape[2:])[0]
+                                            size=self.k_shape[2:])[0]
                 accumulated_obs.append((
                     k_acts.permute(0, 2, 3, 1).reshape(-1, k_acts.shape[1]),
-                    area.view(-1)[:,None].to(k_acts.device)))
+                    area.view(-1)[:, None].to(k_acts.device)))
             all_obs = torch.cat([obs for obs, _ in accumulated_obs])
             all_weight = torch.cat([w for _, w in accumulated_obs])
             square_scale = self.square_scales_for_units().to(all_obs.device)
-            all_logscore = all_obs.pow(2) / square_scale[None,:]
-            mean_logscore = ((all_logscore * all_weight).sum(0)
-                    / sum(all_weight))
+            all_logscore = all_obs.pow(2) / square_scale[None, :]
+            mean_logscore = ((all_logscore * all_weight).sum(0) / sum(all_weight))
             top_coords = mean_logscore.sort(descending=True)[1][:rank]
             return top_coords
 
     def erase_from_selection(self, imgnum, mask, context_mask_pairs, rank):
         k_area = renormalize.from_url(
-                mask, target='pt', size=self.k_shape[2:])[0]
+            mask, target='pt', size=self.k_shape[2:])[0]
         area = renormalize.from_url(
-                mask, target='pt', size=self.v_shape[2:])[0]
+            mask, target='pt', size=self.v_shape[2:])[0]
         source_outputs = self.context_model(self.get_z(imgnum))
         source_acts = self.context_acts(source_outputs)
         unchanged_outputs = self.target_model(source_outputs)
         source_acts_without_units = source_acts.clone()
         d_units = self.normdissect_units(context_mask_pairs, rank)
-        source_acts_without_units[:,d_units] = 0.0
+        source_acts_without_units[:, d_units] = 0.0
         d_erased_in = self.merge_target_output(
             source_outputs, source_acts_without_units, None)
         d_erased_out = self.target_model(d_erased_in)
@@ -531,7 +534,7 @@ class ProgressiveGanRewriter(object):
 
     def paste_from_selection(self, imgnum, mask, obj_acts, obj_area):
         area = renormalize.from_url(
-                mask, target='pt', size=self.v_shape[2:])[0]
+            mask, target='pt', size=self.v_shape[2:])[0]
         source_outputs = self.context_model(self.get_z(imgnum))
         source_acts = self.context_acts(source_outputs)
         unchanged_outputs = self.target_model(source_outputs)
@@ -542,7 +545,7 @@ class ProgressiveGanRewriter(object):
         full_target_acts = target_acts
         if self.tight_paste:
             source_acts, target_acts, source_bounds, target_bounds = (
-                    crop_clip_to_bounds(source_acts, target_acts, bounds))
+                crop_clip_to_bounds(source_acts, target_acts, bounds))
         else:
             source_bounds, target_bounds = None, None
         goal_in = self.merge_target_output(
@@ -557,15 +560,15 @@ class ProgressiveGanRewriter(object):
         area = renormalize.from_url(mask, target='pt', size=self.x_shape[2:])[0]
         with torch.no_grad():
             x_output = self.model(self.get_z(imgnum))
-        t,l,b,r = positive_bounding_box(area)
-        rgb_clip = x_output[:,:,t:b,l:r]
-        obj_area = area[t:b,l:r]
-        return rgb_clip, x_output, obj_area, (t,l,b,r)
+        t, l, b, r = positive_bounding_box(area)
+        rgb_clip = x_output[:, :, t:b, l:r]
+        obj_area = area[t:b, l:r]
+        return rgb_clip, x_output, obj_area, (t, l, b, r)
 
     def rgbpaste_from_selection(self, imgnum, mask, obj_rgb, obj_area):
         with torch.no_grad():
             area = renormalize.from_url(
-                    mask, target='pt', size=self.x_shape[2:])[0]
+                mask, target='pt', size=self.x_shape[2:])[0]
             source_z = self.get_z(imgnum)
             unchanged_rgb = self.model(source_z)
             changed_rgb, bounds = paste_clip_at_center(
@@ -578,11 +581,11 @@ class ProgressiveGanRewriter(object):
                 def squared_unit_values(zbatch):
                     acts = self.context_acts(self.context_model(
                         zbatch.to(self.device))).detach()
-                    flattened = acts.permute(0,2,3,1).reshape(-1,acts.shape[1])
+                    flattened = acts.permute(0, 2, 3, 1).reshape(-1, acts.shape[1])
                     return flattened.pow(2)
                 self.unit_rs = tally.tally_mean(
-                        squared_unit_values, self.zds,
-                        cachefile=self.rf('unit_rs.npz')).mean()
+                    squared_unit_values, self.zds,
+                    cachefile=self.rf('unit_rs.npz')).mean()
         return self.unit_rs
 
     def quantiles_for_units(self):
@@ -591,11 +594,11 @@ class ProgressiveGanRewriter(object):
                 def flattened_unit_values(zbatch):
                     acts = self.context_acts(self.context_model(
                         zbatch.to(self.device))).detach()
-                    flattened = acts.permute(0,2,3,1).reshape(-1,acts.shape[1])
+                    flattened = acts.permute(0, 2, 3, 1).reshape(-1, acts.shape[1])
                     return flattened
                 self.unit_rq = tally.tally_quantile(
-                        flattened_unit_values, self.zds,
-                        cachefile=self.rf('unit_rq.npz'))
+                    flattened_unit_values, self.zds,
+                    cachefile=self.rf('unit_rq.npz'))
         return self.unit_rq
 
     def quantiles_for_covariance_adjusted_directions(self):
@@ -604,42 +607,42 @@ class ProgressiveGanRewriter(object):
                 def flattened_unit_values(zbatch):
                     outs = self.context_model(zbatch.to(self.device))
                     acts = self.context_acts(outs)
-                    flattened = acts.permute(0,2,3,1).reshape(-1,acts.shape[1])
+                    flattened = acts.permute(0, 2, 3, 1).reshape(-1, acts.shape[1])
                     # TODO: support unrolling batch outs.
                     adjusted = self.covariance_adjusted_key(flattened, outs)
                     return adjusted
                 self.cad_rq = tally.tally_quantile(
-                        flattened_unit_values, self.zds,
-                        cachefile=self.rf('unit_cad.npz'))
+                    flattened_unit_values, self.zds,
+                    cachefile=self.rf('unit_cad.npz'))
         return self.cad_rq
 
     def ranking_for_key(self, key, k=12):
-        tensorkey = key.to(self.device)[None,:,None,None]
+        tensorkey = key.to(self.device)[None, :, None, None]
         with pbar.quiet(), torch.no_grad():
             def image_max_sel(zbatch):
                 acts = self.context_acts(self.context_model(
                     zbatch.to(self.device)))
                 heatmap = (acts * tensorkey).sum(dim=1)
                 maxmap = heatmap.view(heatmap.shape[0], -1).max(1)[0]
-                flatmap = heatmap.view(-1)[:,None]
+                flatmap = heatmap.view(-1)[:, None]
                 return maxmap, flatmap
             topk, rq = tally.tally_topk_and_quantile(
-                    image_max_sel, self.zds, k=k)
+                image_max_sel, self.zds, k=k)
         return topk.result()[1], rq
 
     def render_object(self, target_output, obj_area=None, box=None):
         with torch.no_grad():
             imgdata = self.rendered_image(
-                    self.rendering_model(target_output))
+                self.rendering_model(target_output))
         if box is None:
             return renormalize.as_image(imgdata[0])
         # Make a mask from the box
         t, l, b, r = box
         lowres = torch.zeros(self.v_shape[2:])
-        lowres[t:b,l:r] = 1
+        lowres[t:b, l:r] = 1
         iv = imgviz.ImageVisualizer(imgdata.shape[2:])
         return iv.masked_image(imgdata, activations=lowres, level=0.0,
-                border_color=[255,0,0], thickness=3)
+                               border_color=[255, 0, 0], thickness=3)
 
     def render_image(self, imgnum, key=None, level=None, mask=None, **kwargs):
         with torch.no_grad():
@@ -647,7 +650,7 @@ class ProgressiveGanRewriter(object):
             target_output = self.target_model(context_output)
             imgdata = self.rendered_image(self.rendering_model(target_output))
         if key is not None and level is not None:
-            tensorkey = key.to(self.device)[None,:,None,None]
+            tensorkey = key.to(self.device)[None, :, None, None]
             acts = self.context_acts(self.context_model(self.get_z(imgnum)))
             heatmap = (acts[...] * tensorkey).sum(dim=1)[0]
             iv = imgviz.ImageVisualizer(imgdata.shape[2:])
@@ -661,23 +664,23 @@ class ProgressiveGanRewriter(object):
         batch_size = 3
         results = []
         for i in range(0, len(imgnums), batch_size):
-            imgnum_batch = imgnums[i:i+batch_size]
+            imgnum_batch = imgnums[i:i + batch_size]
             with torch.no_grad():
                 z_batch = torch.cat([self.get_z(imgnum)
-                    for imgnum in imgnum_batch])
+                                     for imgnum in imgnum_batch])
                 context_output = self.context_model(z_batch)
                 target_output = self.target_model(context_output)
                 imgdata_batch = self.rendered_image(
-                        self.rendering_model(target_output))
+                    self.rendering_model(target_output))
             if key is not None and level is not None:
-                tensorkey = key.to(self.device)[None,:,None,None]
+                tensorkey = key.to(self.device)[None, :, None, None]
                 acts = self.context_acts(self.context_model(z_batch))
                 heatmap = (acts[...] * tensorkey).sum(dim=1)
                 iv = imgviz.ImageVisualizer(imgdata_batch.shape[2:])
                 results.extend(
-                        [iv.masked_image(imgdata, heatmap[j], level=level,
-                            **kwargs)
-                            for j, imgdata in enumerate(imgdata_batch)])
+                    [iv.masked_image(imgdata, heatmap[j], level=level,
+                                     **kwargs)
+                     for j, imgdata in enumerate(imgdata_batch)])
             else:
                 results.extend([
                     renormalize.as_image(imgdata) for imgdata in imgdata_batch])
@@ -688,13 +691,14 @@ class ProgressiveGanRewriter(object):
             return None
         return os.path.join(self.cachedir, fn)
 
+
 class SeqStyleGanRewriter(ProgressiveGanRewriter):
     def __init__(self, model, zds, layernum, **kwargs):
         super().__init__(model, zds, layernum, **kwargs)
 
     def maplayers(self, layernum):
         first = 'layer%d.sconv.mconv.dconv' % layernum
-        last =  'layer%d.sconv.activate' % layernum
+        last = 'layer%d.sconv.activate' % layernum
         return first, last
 
     def sample_image_patch(self, z, act_crop_size, seed=(None, None), act=False, size=None):
@@ -716,8 +720,8 @@ class SeqStyleGanRewriter(ProgressiveGanRewriter):
         if feature_map.shape[2:] == img.shape[2:]:
             img_cropped = img[:, :, xi:xf, yi:yf]
         else:
-            #stylegan's running image is bigger than our activation, so we need to upsample the mask.
-            img_cropped = img[:, :, 2*xi:2*xf, 2*yi:2*yf]
+            # stylegan's running image is bigger than our activation, so we need to upsample the mask.
+            img_cropped = img[:, :, 2 * xi:2 * xf, 2 * yi:2 * yf]
 
         out['output'] = img_cropped
         out['fmap'] = feature_map_cropped
@@ -727,14 +731,12 @@ class SeqStyleGanRewriter(ProgressiveGanRewriter):
             return result
         else:
             highest_channel = feature_map_cropped.max(3)[0].max(2)[0].max(1)[1].item()
-            #size = feature_map_cropped.shape[2]
             iv = imgviz.ImageVisualizer((size, size))
             return result, iv.heatmap(feature_map_cropped[0, highest_channel], mode='nearest')
 
-
     def covariance_adjusted_query_key(self, k):
         if len(k.shape) == 1:
-            return torch.lstsq(k[:,None], self.c_matrix)[0][:,0]
+            return torch.lstsq(k[:, None], self.c_matrix)[0][:, 0]
         return torch.lstsq(k.permute(1, 0), self.c_matrix)[0].permute(1, 0)
 
     def covariance_adjusted_key(self, k, kout):
@@ -756,12 +758,13 @@ class SeqStyleGanRewriter(ProgressiveGanRewriter):
 
     def merge_target_output(self, target_out, new_acts, crop_bounds):
         newcopy = type(target_out)(
-                {k: d.detach() for k, d in target_out.items()})
+            {k: d.detach() for k, d in target_out.items()})
         if crop_bounds is not None:
             t, l, b, r = crop_bounds
-            newcopy.output = newcopy.output[:,:,t:b,l:r]
+            newcopy.output = newcopy.output[:, :, t:b, l:r]
         newcopy.fmap = new_acts
         return newcopy
+
 
 class SeqTinyStyleGanRewriter(SeqStyleGanRewriter):
     def __init__(self, model, zds, layernum, **kwargs):
@@ -769,8 +772,9 @@ class SeqTinyStyleGanRewriter(SeqStyleGanRewriter):
 
     def maplayers(self, layernum):
         first = 'layer%d.sconv.mconv.dconv' % layernum
-        last =  'layer%d.sconv.mconv.dconv' % layernum
+        last = 'layer%d.sconv.mconv.dconv' % layernum
         return first, last
+
 
 class SeqPreStyleGanRewriter(SeqStyleGanRewriter):
     def __init__(self, model, zds, layernum, **kwargs):
@@ -778,7 +782,7 @@ class SeqPreStyleGanRewriter(SeqStyleGanRewriter):
 
     def maplayers(self, layernum):
         first = 'layer%d.sconv.mconv.adain' % layernum
-        last =  'layer%d.sconv.activate' % layernum
+        last = 'layer%d.sconv.activate' % layernum
         return first, last
 
     def covariance_adjusted_key(self, k, kout):
@@ -787,9 +791,9 @@ class SeqPreStyleGanRewriter(SeqStyleGanRewriter):
         # rank subspace corresponding to (CS)^{-1} k.
         assert kout.style.shape[0] == 1
         # cs = self.c_matrix * kout.style[0][:,None]  # SC version
-        cs = self.c_matrix * kout.style[0][None,:] # CS version, correct I think
+        cs = self.c_matrix * kout.style[0][None, :]  # CS version, correct I think
         if len(k.shape) == 1:
-            return torch.lstsq(k[:,None], cs)[0][:,0]
+            return torch.lstsq(k[:, None], cs)[0][:, 0]
         return torch.lstsq(k.permute(1, 0), cs)[0].permute(1, 0)
 
 
@@ -806,8 +810,8 @@ class GanRewriteWidget(labwidget.Widget):
         self.savedir = self.gw.cachedir if mask_dir is None else mask_dir
         self.original_model = copy.deepcopy(gw.model)
         self.request = {}
-        self.imgnum_textbox = labwidget.Textbox('0-%d' % (num_canvases-1)
-                ).on('value', self.change_numbers)
+        self.imgnum_textbox = labwidget.Textbox('0-%d' % (num_canvases - 1)
+                                                ).on('value', self.change_numbers)
         self.msg_out = labwidget.Div()
         self.loss_out = labwidget.Div()
         self.query_out = labwidget.Div()
@@ -815,18 +819,18 @@ class GanRewriteWidget(labwidget.Widget):
         self.target_out = labwidget.Div()
         self.keytray_div = labwidget.Div(style={'display': 'none'})
         self.keytray_menu = labwidget.Menu(
-                ).on('selection', self.repaint_key_tray)
+        ).on('selection', self.repaint_key_tray)
         self.keytray_removebtn = labwidget.Button('remove'
-                ).on('click', self.keytray_remove)
+                                                  ).on('click', self.keytray_remove)
         self.keytray_showbtn = labwidget.Button('show'
-                ).on('click', self.keytray_show)
+                                                ).on('click', self.keytray_show)
         self.keytray_querybtn = labwidget.Button('query'
-                ).on('click', self.keytray_query)
+                                                 ).on('click', self.keytray_query)
         self.keytray_zerobtn = labwidget.Button('zero'
-                ).on('click', self.keytray_zero)
+                                                ).on('click', self.keytray_zero)
         self.keytray_canvas = paintwidget.PaintWidget(
-                width=self.size, height=self.size,
-                vanishing=False, disabled=True)
+            width=self.size, height=self.size,
+            vanishing=False, disabled=True)
         self.keytray_div.show([
             [
                 self.keytray_menu,
@@ -839,26 +843,26 @@ class GanRewriteWidget(labwidget.Widget):
         self.key_btn = labwidget.Button('key').on('click', self.key_add)
         self.query_btn = labwidget.Button('query').on('click', self.query)
         self.highlight_btn = labwidget.Button('highlight'
-                ).on('click', self.toggle_highlight)
+                                              ).on('click', self.toggle_highlight)
         self.object_btn = labwidget.Button('object'
-                ).on('click', self.pick_object)
+                                           ).on('click', self.pick_object)
         self.snap_btn = labwidget.Button('snap'
-                ).on('click', self.snapshot_images)
+                                         ).on('click', self.snapshot_images)
         self.brushsize_textbox = labwidget.Textbox(10, desc='brush: ', size=3
-                ).on('value', self.change_brushsize)
+                                                   ).on('value', self.change_brushsize)
         self.rank_textbox = labwidget.Textbox(
-                '1', desc='rank: ', size=4)
+            '1', desc='rank: ', size=4)
         self.paste_niter_textbox = labwidget.Textbox(
-                '2001', desc='paste niter: ', size=8)
+            '2001', desc='paste niter: ', size=8)
         self.paste_piter_textbox = labwidget.Textbox(
-                '10', desc='proj every: ', size=4)
+            '10', desc='proj every: ', size=4)
         self.paste_lr_textbox = labwidget.Textbox(
-                '0.05', desc='paste lr: ', size=8)
+            '0.05', desc='paste lr: ', size=8)
         self.paste_btn = labwidget.Button('paste').on('click', self.paste)
         self.erase_btn = labwidget.Button('erase').on('click', self.exec_erase)
         self.exec_btn = labwidget.Button('exec').on('click', self.exec_request)
         self.overfit_btn = labwidget.Button('overfit').on(
-                'click', self.exec_overfit)
+            'click', self.exec_overfit)
         self.revert_btn = labwidget.Button('revert').on('click', self.revert)
         self.saved_list = labwidget.Datalist(choices=self.saved_names())
         self.load_btn = labwidget.Button('load').on('click', self.tryload)
@@ -876,13 +880,13 @@ class GanRewriteWidget(labwidget.Widget):
             self.canvas_array.append(paintwidget.PaintWidget(
                 image=renormalize.as_url(
                     self.gw.render_image(i)),
-                     width=self.size, height=self.size
-                     ).on('mask', self.change_mask))
+                width=self.size, height=self.size
+            ).on('mask', self.change_mask))
             self.canvas_array[-1].index = i
             self.snap_image_array.append(
-                    labwidget.Image(style={'margin-top':0,
-                    'max-width':'%dpx' % self.size,
-                    'max-height':'%dpx' % self.size}))
+                labwidget.Image(style={'margin-top': 0,
+                                       'max-width': '%dpx' % self.size,
+                                       'max-height': '%dpx' % self.size}))
             self.snap_image_array[-1].index = i
         self.current_mask_item = None
 
@@ -906,7 +910,7 @@ class GanRewriteWidget(labwidget.Widget):
         else:
             sel = int(self.keytray_menu.selection)
         self.keytray_canvas.image = renormalize.as_url(
-                    self.gw.render_image(sel, None))
+            self.gw.render_image(sel, None))
         self.keytray_canvas.mask = keymasks[sel]
 
     def keytray_remove(self):
@@ -948,8 +952,7 @@ class GanRewriteWidget(labwidget.Widget):
         self.show_msg(f'zeroed key value from model')
 
     def key_add(self):
-        if (self.current_mask_item is None
-                or not self.canvas_array[self.current_mask_item].mask):
+        if self.current_mask_item is None or not self.canvas_array[self.current_mask_item].mask:
             return
         imgnum = self.sel[self.current_mask_item]
         mask = self.canvas_array[self.current_mask_item].mask
@@ -965,9 +968,9 @@ class GanRewriteWidget(labwidget.Widget):
 
     def repaint_canvas_array(self):
         level = (self.query_rq.quantiles(0.999)[0]
-                if (self.query_vis and self.query_rq) else None)
+                 if (self.query_vis and self.query_rq) else None)
         images = self.gw.render_image_batch(self.sel,
-                self.query_key if self.query_vis else None, level)
+                                            self.query_key if self.query_vis else None, level)
         for i, canvas in enumerate(self.canvas_array):
             canvas.mask = ''
             size = (canvas.height, canvas.width) if canvas.height else None
@@ -990,9 +993,10 @@ class GanRewriteWidget(labwidget.Widget):
             try:
                 bottom = int(p[0])
                 top = int(p[1]) if len(p) > 1 else bottom
-                sel.extend([i for i in range(bottom, top+1)
-                    if 0 <= i < len(self.gw.zds)])
+                sel.extend([i for i in range(bottom, top + 1)
+                            if 0 <= i < len(self.gw.zds)])
             except Exception as e:
+                print('exception {}'.format(e))
                 pass
             if len(sel) >= len(self.canvas_array):
                 sel = sel[:len(self.canvas_array)]
@@ -1022,8 +1026,7 @@ class GanRewriteWidget(labwidget.Widget):
 
     def query(self):
         if self.overwriting or 'query' not in self.request:
-            if (self.current_mask_item is None
-                    or not self.canvas_array[self.current_mask_item].mask):
+            if self.current_mask_item is None or not self.canvas_array[self.current_mask_item].mask:
                 return
             imgnum = self.sel[self.current_mask_item]
             mask = self.canvas_array[self.current_mask_item].mask
@@ -1049,8 +1052,7 @@ class GanRewriteWidget(labwidget.Widget):
 
     def pick_object(self):
         if self.overwriting or 'object' not in self.request:
-            if (self.current_mask_item is None
-                    or not self.canvas_array[self.current_mask_item].mask):
+            if self.current_mask_item is None or not self.canvas_array[self.current_mask_item].mask:
                 return
             imgnum = self.sel[self.current_mask_item]
             mask = self.canvas_array[self.current_mask_item].mask
@@ -1058,11 +1060,11 @@ class GanRewriteWidget(labwidget.Widget):
         self.exec_object()
 
     def exec_object(self, obj_acts=None, obj_area=None, obj_output=None,
-            bounds=None):
+                    bounds=None):
         if obj_acts is None:
             imgnum, mask = self.request['object']
             obj_acts, obj_output, obj_area, bounds = (
-                    self.gw.object_from_selection(imgnum, mask))
+                self.gw.object_from_selection(imgnum, mask))
         if obj_area is None:
             obj_area = torch.ones(obj_acts.shape[2:], device=obj_acts.device)
         self.obj_acts, self.obj_area = obj_acts, obj_area
@@ -1071,8 +1073,8 @@ class GanRewriteWidget(labwidget.Widget):
         imgout = self.gw.render_object(cropped_out, obj_area)
         iv = imgviz.ImageVisualizer((imgout.height, imgout.width))
         self.object_out.show(
-                ['value (from %d):' % imgnum, [imgout],
-                [iv.heatmap(obj_acts[0, highest_channel], mode='nearest')]])
+            ['value (from %d):' % imgnum, [imgout],
+             [iv.heatmap(obj_acts[0, highest_channel], mode='nearest')]])
         self.show_msg('picked object')
 
     def show_request_mask(self, field='object', index=None, **kwargs):
@@ -1088,7 +1090,7 @@ class GanRewriteWidget(labwidget.Widget):
         else:
             imgnum, mask = self.request[field]
         area = (renormalize.from_url(mask, target='pt',
-                            size=self.gw.x_shape[2:])[0] > 0.25)
+                                     size=self.gw.x_shape[2:])[0] > 0.25)
         imgout = self.gw.render_image(imgnum, mask=area, **kwargs)
         show(imgout)
 
@@ -1118,7 +1120,7 @@ class GanRewriteWidget(labwidget.Widget):
     def exec_paste(self):
         imgnum, mask = self.request['paste']
         goal_in, goal_out, _, _ = self.gw.paste_from_selection(
-                    imgnum, mask, self.obj_acts, self.obj_area)
+            imgnum, mask, self.obj_acts, self.obj_area)
         self.target_out.show([
             'goal (in %d):' % imgnum,
             [self.gw.render_object(self.gw.target_model(goal_in))],
@@ -1136,14 +1138,15 @@ class GanRewriteWidget(labwidget.Widget):
         niter = int(self.paste_niter_textbox.value)
         piter = int(self.paste_piter_textbox.value)
         lr = float(self.paste_lr_textbox.value)
+
         def update_callback(it, loss):
             if it % 50 == 0 or it == niter - 1:
                 loss_info = (f'lr {lr:.4f}\titer {it: 6d}/{niter: 6d}'
                              f'\tloss {loss.item():.4f}')
                 self.loss_out.print(loss_info, replace=True)
         self.gw.apply_erase(self.request,
-                rank=rank, drank=30, niter=niter, piter=piter, lr=lr,
-                update_callback=update_callback)
+                            rank=rank, drank=30, niter=niter, piter=piter, lr=lr,
+                            update_callback=update_callback)
         self.repaint_canvas_array()
         self.show_msg(f'erased from model')
 
@@ -1159,14 +1162,15 @@ class GanRewriteWidget(labwidget.Widget):
         niter = int(self.paste_niter_textbox.value)
         piter = int(self.paste_piter_textbox.value)
         lr = float(self.paste_lr_textbox.value)
+
         def update_callback(it, loss):
             if it % 50 == 0 or it == niter - 1:
                 loss_info = (f'lr {lr:.4f}\titer {it: 6d}/{niter: 6d}'
                              f'\tloss {loss.item():.4f}')
                 self.loss_out.print(loss_info, replace=True)
         self.gw.apply_edit(self.request,
-                rank=rank, niter=niter, piter=piter, lr=lr,
-                update_callback=update_callback)
+                           rank=rank, niter=niter, piter=piter, lr=lr,
+                           update_callback=update_callback)
         self.repaint_canvas_array()
         self.show_msg(f'pasted into model')
 
@@ -1180,13 +1184,14 @@ class GanRewriteWidget(labwidget.Widget):
         self.show_msg('overfitting model...')
         niter = int(self.paste_niter_textbox.value)
         lr = float(self.paste_lr_textbox.value)
+
         def update_callback(it, loss):
             if it % 50 == 0 or it == niter - 1:
                 loss_info = (f'lr {lr:.4f}\titer {it: 6d}/{niter: 6d}'
                              f'\tloss {loss.item():.4f}')
                 self.loss_out.print(loss_info, replace=True)
         self.gw.apply_overfit(self.request,
-                niter=niter, lr=lr, update_callback=update_callback)
+                              niter=niter, lr=lr, update_callback=update_callback)
         self.repaint_canvas_array()
         self.show_msg(f'overfitted into model')
 
@@ -1203,13 +1208,12 @@ class GanRewriteWidget(labwidget.Widget):
         if self.saved_list.value in self.saved_list.choices:
             self.show_msg('loading edit...')
             self.load_from_name(self.saved_list.value)
-            self.show_msg('loaded from ' + self.saved_list.value +
-                    '; exec to execute model change.')
+            self.show_msg('loaded from ' + self.saved_list.value + '; exec to execute model change.')
 
     def saved_names(self):
         os.makedirs(self.savedir, exist_ok=True)
         return sorted([name[:-5] for name in os.listdir(self.savedir)
-                      if name.endswith('.json')])
+                       if name.endswith('.json')])
 
     def save_as_name(self, name):
         data = self.request
@@ -1265,7 +1269,6 @@ class GanRewriteWidget(labwidget.Widget):
                 zip(self.canvas_array, self.snap_image_array)]])
 
 
-
 ##########################################################################
 # Utility functions
 ##########################################################################
@@ -1277,32 +1280,34 @@ def positive_bounding_box(data):
     v, h = pos.sum(0).nonzero(), pos.sum(1).nonzero()
     left, right = v.min().item(), v.max().item()
     top, bottom = h.min().item(), h.max().item()
-    return top, left, bottom+1, right+1
+    return top, left, bottom + 1, right + 1
+
 
 def centered_location(data):
-    t,l,b,r = positive_bounding_box(data)
+    t, l, b, r = positive_bounding_box(data)
     return (t + b) // 2, (l + r) // 2
+
 
 def paste_clip_at_center(source, clip, center, area=None):
     target = source.clone()
     # clip = clip[:,:,:target.shape[2],:target.shape[3]]
     t, l = (max(0, min(e - s, c - s // 2))
             for s, c, e in zip(clip.shape[2:], center, source.shape[2:]))
-    b, r = t+clip.shape[2],l+clip.shape[3]
+    b, r = t + clip.shape[2], l + clip.shape[3]
     # TODO: consider copying over a subset of channels.
-    target[:,:,t:b,l:r] = clip if area is None else (
-            (1 - area)[None,None,:,:].to(target.device) *
-            target[:,:,t:b,l:r] +
-            area[None,None,:,:].to(target.device) * clip)
+    target[:, :, t:b, l:r] = clip if area is None else (
+        (1 - area)[None, None, :, :].to(target.device) * target[:, :, t:b, l:r] + area[None, None, :, :].to(target.device) * clip)
     return target, (t, l, b, r)
+
 
 def crop_clip_to_bounds(source, target, bounds):
     t, l, b, r = bounds
     vr, hr = [ts // ss for ts, ss in zip(target.shape[2:], source.shape[2:])]
     st, sl, sb, sr = t // vr, l // hr, -(-b // vr), -(-r // hr)
     tt, tl, tb, tr = st * vr, sl * hr, sb * vr, sr * hr
-    cs, ct = source[:,:,st:sb,sl:sr], target[:,:,tt:tb,tl:tr]
+    cs, ct = source[:, :, st:sb, sl:sr], target[:, :, tt:tb, tl:tr]
     return cs, ct, (st, sl, sb, sr), (tt, tl, tb, tr)
+
 
 def projected_conv(weight, direction):
     if len(weight.shape) == 5:
@@ -1313,13 +1318,15 @@ def projected_conv(weight, direction):
         result = torch.einsum('odyx, di -> oiyx', cosine_map, direction)
     return result
 
+
 def rank_one_conv(weight, direction):
-    cosine_map = (weight * direction[None,:,None,None]).sum(1, keepdim=True)
-    return cosine_map * direction[None,:,None,None]
+    cosine_map = (weight * direction[None, :, None, None]).sum(1, keepdim=True)
+    return cosine_map * direction[None, :, None, None]
+
 
 def zca_from_cov(cov):
     evals, evecs = torch.symeig(cov.double(), eigenvectors=True)
     zca = torch.mm(torch.mm(evecs, torch.diag
-        (evals.sqrt().clamp(1e-20).reciprocal())),
-        evecs.t()).to(cov.dtype)
+                            (evals.sqrt().clamp(1e-20).reciprocal())),
+                   evecs.t()).to(cov.dtype)
     return zca

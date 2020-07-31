@@ -20,6 +20,7 @@
 __pycache__
 *.pyc
 .idea
+tox.ini
 node_modules/
 .__*
 .*.swp

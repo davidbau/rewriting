@@ -20,7 +20,7 @@ Model rewriting envisions a way to construct deep networks according to a user's
 
 [**Rewriting a Deep Generative Model**](https://rewriting.csail.mit.edu/).<br>
 [David Bau](https://people.csail.mit.edu/davidbau/home/), [Steven Liu](http://people.csail.mit.edu/stevenliu/), [Tongzhou Wang](https://ssnl.github.io/), [Jun-Yan Zhu](http://people.csail.mit.edu/junyanz/), [Antonio Torralba](http://web.mit.edu/torralba/www/). <br>
-ECCV 2020 (oral).
+ECCV 2020 (oral).<br>
 MIT CSAIL and Adobe Research.
 
 <table><tr><td><center><a href="https://rewriting.csail.mit.edu/paper/"><img height="100" width="78" src="images/paper-thumb.png" style="border:1px solid" data-nothumb=""><br>ECCV 2020<br>Preprint</a></center></td>
