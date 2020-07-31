@@ -134,6 +134,7 @@ class SeqStyleGAN2(nn.Sequential):
     def load_state_dict(self, data):
         try:
             super().load_state_dict(data)
+            return
         except:
             pass
         # If the state dict does not match, try converting other versions
