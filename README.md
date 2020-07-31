@@ -59,5 +59,5 @@ The code runs using PyTorch.
 ## Setup
 
 It's designed to use a recent version of PyTorch (1.4+) on python (3.6), using
-cuda 10.1 and cudnn 7.6.0.  The `/setup` directory has a script to create a
-conda environment that has the needed dependencies.
+cuda 10.1 and cudnn 7.6.0.  Run `setup/setup_renv.sh` to create a conda environment
+that has the needed dependencies.
