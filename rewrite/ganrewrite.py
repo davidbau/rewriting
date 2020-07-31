@@ -4,6 +4,7 @@ import torch
 import json
 import random
 import time
+import warnings
 from utils import nethook, renormalize, pbar, tally, imgviz
 from collections import OrderedDict
 import torchvision
@@ -346,14 +347,17 @@ class ProgressiveGanRewriter(object):
                         k_acts.permute(0, 2, 3, 1).reshape(-1, k_acts.shape[1]),
                         k_outs,
                         area.view(-1)[:, None].to(k_acts.device)))
-                all_obs = torch.cat([obs[(w > 0).nonzero(False)[:, 0], :]
-                                     for obs, _, w in accumulated_obs])
-                all_weight = torch.cat([w[w > 0]
-                                        for _, _, w in accumulated_obs])
-                all_zca_k = torch.cat([
-                    (w * self.zca_whitened_query_key(obs)
-                     )[(w > 0).nonzero(False)[:, 0], :]
-                    for obs, outs, w in accumulated_obs])
+                with warnings.catch_warnings():
+                    # nonzero() prints a warning about a new signature we can ignore.
+                    warnings.simplefilter('ignore', UserWarning)
+                    all_obs = torch.cat([obs[(w > 0).nonzero()[:, 0], :]
+                                         for obs, _, w in accumulated_obs])
+                    all_weight = torch.cat([w[w > 0]
+                                            for _, _, w in accumulated_obs])
+                    all_zca_k = torch.cat([
+                        (w * self.zca_whitened_query_key(obs)
+                         )[(w > 0).nonzero()[:, 0], :]
+                        for obs, outs, w in accumulated_obs])
                 # all_zca_k is already transposed
                 _, _, q = all_zca_k.svd(compute_uv=True)
                 # Get the top rank e_vecs in whitened space
@@ -764,7 +768,10 @@ def positive_bounding_box(data):
     pos = (data > 0)
     if pos.sum() == 0:
         return 0, 0, 0, 0
-    v, h = pos.sum(0).nonzero(False), pos.sum(1).nonzero(False)
+    with warnings.catch_warnings():
+        # nonzero() prints a warning about a new signature we can ignore.
+        warnings.simplefilter('ignore', UserWarning)
+        v, h = pos.sum(0).nonzero(), pos.sum(1).nonzero()
     left, right = v.min().item(), v.max().item()
     top, bottom = h.min().item(), h.max().item()
     return top, left, bottom + 1, right + 1

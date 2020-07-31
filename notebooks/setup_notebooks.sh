@@ -9,6 +9,8 @@ git config filter.clean_ipynb.smudge cat
 git config filter.clean_ipynb.required true
 
 # Set up symlinks for the example notebooks
+mkdir -p ../datasets
+mkdir -p ../results
 ln -sfn ../datasets -t .
 ln -sfn ../results -t .
 ln -sfn ../rewrite -t .
