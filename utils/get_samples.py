@@ -1,13 +1,13 @@
-import os, random, copy
+import os
+import random
 
 import torch
-import numpy as np
 from tqdm import tqdm
 from PIL import Image
 
 from utils.stylegan2 import load_seq_stylegan
-from netdissect import setting, zdataset, ganrewrite
-from torchvision import transforms, utils
+from netdissect import setting, zdataset
+from torchvision import transforms
 
 paths = {
     'ffhq': '/data/vision/torralba/datasets/ffhq/images1024x1024/',
@@ -50,7 +50,8 @@ def get_image_paths(root, N):
                     all_files.append(os.path.join(dp, f))
                 else:
                     print('skipped', f)
-                if len(all_files) >= N: return all_files
+                if len(all_files) >= N:
+                    return all_files
         return all_files
 
 
@@ -66,7 +67,7 @@ def get_transform(size):
 
 def get_cropped_gt_samples(dataset, nimgs=50000, crop_sizes=[32]):
     ''' returns list of cropped real images, sampled uniformily over all crop sizes'''
-    #TODO: clean up duplicate code with get_cropped_fake_samples
+    # TODO: clean up duplicate code with get_cropped_fake_samples
     size = sizes[dataset]
     transform = get_transform(size)
     all_images = get_image_paths(paths[dataset], nimgs)
@@ -135,7 +136,7 @@ def seeded_cropped_sample(g,
                           crop_size,
                           act=True,
                           size=None):
-    
+
     with torch.no_grad():
         z = zdataset.z_sample_for_model(g, size=1, seed=imgnum).cuda()
         return gw.sample_image_patch(z,
@@ -166,4 +167,3 @@ def get_cropped_fake_samples(model,
         images[i] = torch.stack(images[i])
 
     return images
-

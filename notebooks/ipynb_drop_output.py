@@ -16,14 +16,14 @@ Usage instructions
 ==================
 
 1. Put this script in a directory that is on the system's path.
-   For future reference, I will assume you saved it in 
+   For future reference, I will assume you saved it in
    `~/scripts/ipynb_drop_output`.
 2. Make sure it is executable by typing the command
    `chmod +x ~/scripts/ipynb_drop_output`.
 3. Register a filter for ipython notebooks by
    putting the following line in `~/.config/git/attributes`:
    `*.ipynb  filter=clean_ipynb`
-4. Connect this script to the filter by running the following 
+4. Connect this script to the filter by running the following
    git commands:
 
    git config --global filter.clean_ipynb.clean ipynb_drop_output
@@ -54,7 +54,7 @@ Notes
 
 Changed by David Bau to make stripping output the default.
 
-This script is inspired by http://stackoverflow.com/a/20844506/827862, but 
+This script is inspired by http://stackoverflow.com/a/20844506/827862, but
 lets the user specify whether the ouptut of a notebook should be kept
 in the notebook's metadata, and works for IPython v3.0.
 """
@@ -72,10 +72,11 @@ if "git" in nb_metadata:
         keep_output = True
 if keep_output:
     sys.stdout.write(nb)
-    exit() 
+    exit()
 
 
-ipy_version = int(json_in["nbformat"])-1 # nbformat is 1 more than actual version.
+ipy_version = int(json_in["nbformat"]) - 1  # nbformat is 1 more than actual version.
+
 
 def strip_output_from_cell(cell):
     if "outputs" in cell:
@@ -94,5 +95,5 @@ else:
     for cell in json_in["cells"]:
         strip_output_from_cell(cell)
 
-json.dump(json_in, sys.stdout, sort_keys=True, indent=1, separators=(",",": "),
-        ensure_ascii=False)
+json.dump(json_in, sys.stdout, sort_keys=True, indent=1, separators=(",", ": "),
+          ensure_ascii=False)

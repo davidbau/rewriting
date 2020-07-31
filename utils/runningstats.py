@@ -5,8 +5,11 @@ RunningTopK maintains top-k statistics for a set of channels in parallel.
 RunningQuantile maintains (sampled) quantile statistics for a set of channels.
 '''
 
-import torch, math, numpy
+import torch
+import math
+import numpy
 from collections import defaultdict
+
 
 class RunningTopK:
     '''
@@ -16,6 +19,7 @@ class RunningTopK:
 
     This version flattens all arrays to avoid crashes.
     '''
+
     def __init__(self, k=100, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -43,17 +47,17 @@ class RunningTopK:
             self.data_shape = data.shape[1:]
             feature_size = int(numpy.prod(self.data_shape))
             self.top_data = torch.zeros(
-                    feature_size, max(10, self.k * 5), out=data.new())
+                feature_size, max(10, self.k * 5), out=data.new())
             self.top_index = self.top_data.clone().long()
             self.linear_index = 0 if len(data.shape) == 1 else torch.arange(
                 feature_size, out=self.top_index.new()).mul_(
-                        self.top_data.shape[-1])[:,None]
+                self.top_data.shape[-1])[:, None]
         size = data.shape[0]
         sk = min(size, self.k)
         if self.top_data.shape[-1] < self.next + sk:
             # Compression: if full, keep topk only.
-            self.top_data[:,:self.k], self.top_index[:,:self.k] = (
-                    self.result(sorted=False, flat=True))
+            self.top_data[:, :self.k], self.top_index[:, :self.k] = (
+                self.result(sorted=False, flat=True))
             self.next = self.k
             free = self.top_data.shape[-1] - self.next
         # Pick: copy the top sk of the next batch into the buffer.
@@ -61,12 +65,12 @@ class RunningTopK:
         # TODO: remove the clone() if it becomes faster.
         cdata = data.contiguous().view(size, -1).t().clone()
         td, ti = cdata.topk(sk, sorted=False)
-        self.top_data[:,self.next:self.next+sk] = td
+        self.top_data[:, self.next:self.next + sk] = td
         if index is not None:
             ti = index[ti]
         else:
             ti = ti + self.count
-        self.top_index[:,self.next:self.next+sk] = ti
+        self.top_index[:, self.next:self.next + sk] = ti
         self.next += sk
         self.count += size
 
@@ -80,11 +84,11 @@ class RunningTopK:
         '''
         k = min(self.k, self.next)
         # bti are top indexes relative to buffer array.
-        td, bti = self.top_data[:,:self.next].topk(k, sorted=sorted)
+        td, bti = self.top_data[:, :self.next].topk(k, sorted=sorted)
         # we want to report top indexes globally, which is ti.
         ti = self.top_index.view(-1)[
-                (bti + self.linear_index).view(-1)
-                ].view(*bti.shape)
+            (bti + self.linear_index).view(-1)
+        ].view(*bti.shape)
         if flat:
             return td, ti
         else:
@@ -99,18 +103,18 @@ class RunningTopK:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                k=self.k,
-                count=self.count,
-                data_shape=tuple(self.data_shape),
-                top_data=self.top_data.cpu().detach().numpy(),
-                top_index=self.top_index.cpu().detach().numpy(),
-                next=self.next,
-                linear_index=(self.linear_index.cpu().numpy()
-                    if isinstance(self.linear_index, torch.Tensor)
-                    else self.linear_index),
-                perm=self.perm)
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            k=self.k,
+            count=self.count,
+            data_shape=tuple(self.data_shape),
+            top_data=self.top_data.cpu().detach().numpy(),
+            top_index=self.top_index.cpu().detach().numpy(),
+            next=self.next,
+            linear_index=(self.linear_index.cpu().numpy()
+                          if isinstance(self.linear_index, torch.Tensor)
+                          else self.linear_index),
+            perm=self.perm)
 
     def set_state_dict(self, dic):
         self.k = dic['k'].item()
@@ -120,8 +124,9 @@ class RunningTopK:
         self.top_index = torch.from_numpy(dic['top_index'])
         self.next = dic['next'].item()
         self.linear_index = (torch.from_numpy(dic['linear_index'])
-                if len(dic['linear_index'].shape) > 0
-                else dic['linear_index'].item())
+                             if len(dic['linear_index'].shape) > 0
+                             else dic['linear_index'].item())
+
 
 class RunningConditionalTopK:
     def __init__(self, k=None, state=None):
@@ -158,9 +163,9 @@ class RunningConditionalTopK:
     def state_dict(self):
         conditions = sorted(self.running_topk.keys())
         result = dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                conditions=conditions)
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            conditions=conditions)
         for i, c in enumerate(conditions):
             result.update({
                 '%d.%s' % (i, k): v
@@ -175,14 +180,16 @@ class RunningConditionalTopK:
                 p, s = k.split('.', 1)
                 subdicts[p][s] = v
         self.running_topk = {
-                c: RunningTopK(state=subdicts[str(i)])
-                for i, c in enumerate(conditions)}
+            c: RunningTopK(state=subdicts[str(i)])
+            for i, c in enumerate(conditions)}
+
 
 class GatherTensor:
     """
     A tensor for gathering results, allocated and shaped on first insert.
     Creaed by tally.gather_topk for gathering topk visualizations.
     """
+
     def __init__(self, topk=None, data_shape=None, k=None, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -225,11 +232,11 @@ class GatherTensor:
     def state_dict(self):
         self._flush_queue()
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                k=self.k,
-                data_shape=tuple(self.data_shape),
-                grid=self._grid.cpu().numpy())
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            k=self.k,
+            data_shape=tuple(self.data_shape),
+            grid=self._grid.cpu().numpy())
 
     def result(self):
         self._flush_queue()
@@ -240,6 +247,7 @@ class GatherTensor:
         self.data_shape = tuple(dic['data_shape'])
         self._grid = torch.from_numpy(dic['grid'])
         self._queue = defaultdict(list)
+
 
 class RunningQuantile:
     """
@@ -263,14 +271,14 @@ class RunningQuantile:
     """
 
     def __init__(self, r=3 * 1024, buffersize=None, seed=None,
-            state=None):
+                 state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
             return
         self.depth = None
         self.dtype = None
         self.device = None
-        resolution = r * 2 # sample array is at least half full before discard
+        resolution = r * 2  # sample array is at least half full before discard
         self.resolution = resolution
         # Default buffersize: 128 samples (and smaller than resolution).
         if buffersize is None:
@@ -293,11 +301,11 @@ class RunningQuantile:
         self.dtype = incoming.dtype
         self.device = incoming.device
         self.data = [torch.zeros(self.depth, self.resolution,
-            dtype=self.dtype, device=self.device)]
+                                 dtype=self.dtype, device=self.device)]
         self.extremes = torch.zeros(self.depth, 2,
-                dtype=self.dtype, device=self.device)
-        self.extremes[:,0] = float('inf')
-        self.extremes[:,-1] = -float('inf')
+                                    dtype=self.dtype, device=self.device)
+        self.extremes[:, 0] = float('inf')
+        self.extremes[:, -1] = -float('inf')
 
     def to_(self, device):
         """Switches internal storage to specified device."""
@@ -325,7 +333,7 @@ class RunningQuantile:
         self._scan_extremes(incoming)
         chunksize = int(math.ceil(self.buffersize / self.samplerate))
         for index in range(0, len(incoming), chunksize):
-            batch = incoming[index:index+chunksize]
+            batch = incoming[index:index + chunksize]
             sample = sample_portion(batch, self.samplerate)
             if len(sample):
                 self._add_every(sample)
@@ -349,8 +357,8 @@ class RunningQuantile:
                 ff = self.firstfree[0]
                 available = self.data[0].shape[1] - ff
             copycount = min(available, supplied - index)
-            self.data[0][:,ff:ff + copycount] = torch.t(
-                    incoming[index:index + copycount,:])
+            self.data[0][:, ff:ff + copycount] = torch.t(
+                incoming[index:index + copycount, :])
             self.firstfree[0] += copycount
             index += copycount
 
@@ -360,17 +368,17 @@ class RunningQuantile:
         # buffer size (rounding up), then we need to shift it up to ensure
         # enough space for future shifting.
         while self.data[index].shape[1] - self.firstfree[index] < (
-                -(-self.data[index-1].shape[1] // 2) if index else 1):
+                -(-self.data[index - 1].shape[1] // 2) if index else 1):
             if index + 1 >= len(self.data):
                 return self._expand()
-            data = self.data[index][:,0:self.firstfree[index]]
+            data = self.data[index][:, 0:self.firstfree[index]]
             data = data.sort()[0]
             if index == 0 and self.samplerate >= 1.0:
-                self._update_extremes(data[:,0], data[:,-1])
+                self._update_extremes(data[:, 0], data[:, -1])
             offset = self._randbit()
             position = self.firstfree[index + 1]
-            subset = data[:,offset::2]
-            self.data[index + 1][:,position:position + subset.shape[1]] = subset
+            subset = data[:, offset::2]
+            self.data[index + 1][:, position:position + subset.shape[1]] = subset
             self.firstfree[index] = 0
             self.firstfree[index + 1] += subset.shape[1]
             index += 1
@@ -379,14 +387,14 @@ class RunningQuantile:
     def _scan_extremes(self, incoming):
         # When sampling, we need to scan every item still to get extremes
         self._update_extremes(
-                torch.min(incoming, dim=0)[0],
-                torch.max(incoming, dim=0)[0])
+            torch.min(incoming, dim=0)[0],
+            torch.max(incoming, dim=0)[0])
 
     def _update_extremes(self, minr, maxr):
-        self.extremes[:,0] = torch.min(
-                torch.stack([self.extremes[:,0], minr]), dim=0)[0]
-        self.extremes[:,-1] = torch.max(
-                torch.stack([self.extremes[:,-1], maxr]), dim=0)[0]
+        self.extremes[:, 0] = torch.min(
+            torch.stack([self.extremes[:, 0], minr]), dim=0)[0]
+        self.extremes[:, -1] = torch.max(
+            torch.stack([self.extremes[:, -1], maxr]), dim=0)[0]
 
     def _randbit(self):
         self.currentbit += 1
@@ -397,18 +405,18 @@ class RunningQuantile:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                resolution=self.resolution,
-                depth=self.depth,
-                buffersize=self.buffersize,
-                samplerate=self.samplerate,
-                data=[d.cpu().detach().numpy()[:,:f].T
-                    for d, f in zip(self.data, self.firstfree)],
-                sizes=[d.shape[1] for d in self.data],
-                extremes=self.extremes.cpu().detach().numpy(),
-                size=self.count,
-                batchcount=self.batchcount)
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            resolution=self.resolution,
+            depth=self.depth,
+            buffersize=self.buffersize,
+            samplerate=self.samplerate,
+            data=[d.cpu().detach().numpy()[:, :f].T
+                  for d, f in zip(self.data, self.firstfree)],
+            sizes=[d.shape[1] for d in self.data],
+            extremes=self.extremes.cpu().detach().numpy(),
+            size=self.count,
+            batchcount=self.batchcount)
 
     def set_state_dict(self, dic):
         self.resolution = int(dic['resolution'])
@@ -422,7 +430,7 @@ class RunningQuantile:
         for d, s in zip(dic['data'], dic['sizes']):
             firstfree.append(d.shape[0])
             buf = numpy.zeros((d.shape[1], s), dtype=d.dtype)
-            buf[:,:d.shape[0]] = d.T
+            buf[:, :d.shape[0]] = d.T
             buffers.append(torch.from_numpy(buf))
         self.firstfree = firstfree
         self.data = buffers
@@ -434,17 +442,17 @@ class RunningQuantile:
 
     def minmax(self):
         if self.firstfree[0]:
-            self._scan_extremes(self.data[0][:,:self.firstfree[0]].t())
+            self._scan_extremes(self.data[0][:, :self.firstfree[0]].t())
         return self.extremes.clone()
 
     def median(self):
-        return self.quantiles([0.5])[:,0]
+        return self.quantiles([0.5])[:, 0]
 
     def mean(self):
         return self.integrate(lambda x: x) / self.count
 
     def variance(self):
-        mean = self.mean()[:,None]
+        mean = self.mean()[:, None]
         return self.integrate(lambda x: (x - mean).pow(2)) / (self.count - 1)
 
     def stdev(self):
@@ -455,7 +463,7 @@ class RunningQuantile:
         if cap > 0:
             # First, make a new layer of the proper capacity.
             self.data.insert(0, torch.zeros(self.depth, cap,
-                dtype=self.dtype, device=self.device))
+                                            dtype=self.dtype, device=self.device))
             self.firstfree.insert(0, 0)
         else:
             # Unless we're so big we are just subsampling.
@@ -466,25 +474,25 @@ class RunningQuantile:
             amount = self.firstfree[index]
             if amount == 0:
                 continue
-            position = self.firstfree[index-1]
+            position = self.firstfree[index - 1]
             # Move data down if it would leave enough empty space there
             # This is the key invariant: enough empty space to fit half
             # of the previous level's buffer size (rounding up)
-            if self.data[index-1].shape[1] - (amount + position) >= (
-                    -(-self.data[index-2].shape[1] // 2) if (index-1) else 1):
-                self.data[index-1][:,position:position + amount] = (
-                        self.data[index][:,:amount])
-                self.firstfree[index-1] += amount
+            if self.data[index - 1].shape[1] - (amount + position) >= (
+                    -(-self.data[index - 2].shape[1] // 2) if (index - 1) else 1):
+                self.data[index - 1][:, position:position + amount] = (
+                    self.data[index][:, :amount])
+                self.firstfree[index - 1] += amount
                 self.firstfree[index] = 0
             else:
                 # Scrunch the data if it would not.
-                data = self.data[index][:,:amount]
+                data = self.data[index][:, :amount]
                 data = data.sort()[0]
                 if index == 1:
-                    self._update_extremes(data[:,0], data[:,-1])
+                    self._update_extremes(data[:, 0], data[:, -1])
                 offset = self._randbit()
-                scrunched = data[:,offset::2]
-                self.data[index][:,:scrunched.shape[1]] = scrunched
+                scrunched = data[:, offset::2]
+                self.data[index][:, :scrunched.shape[1]] = scrunched
                 self.firstfree[index] = scrunched.shape[1]
         return cap > 0
 
@@ -498,16 +506,16 @@ class RunningQuantile:
 
     def _weighted_summary(self, sort=True):
         if self.firstfree[0]:
-            self._scan_extremes(self.data[0][:,:self.firstfree[0]].t())
+            self._scan_extremes(self.data[0][:, :self.firstfree[0]].t())
         size = sum(self.firstfree)
-        weights = torch.FloatTensor(size) # Floating point
+        weights = torch.FloatTensor(size)  # Floating point
         summary = torch.zeros(self.depth, size,
-                dtype=self.dtype, device=self.device)
+                              dtype=self.dtype, device=self.device)
         index = 0
         for level, ff in enumerate(self.firstfree):
             if ff == 0:
                 continue
-            summary[:,index:index + ff] = self.data[level][:,:ff]
+            summary[:, index:index + ff] = self.data[level][:, :ff]
             weights[index:index + ff] = 2.0 ** level
             index += ff
         assert index == summary.shape[1]
@@ -515,11 +523,11 @@ class RunningQuantile:
             summary, order = torch.sort(summary, dim=-1)
             weights = weights[order.view(-1).cpu()].view(order.shape)
             summary = torch.cat(
-                    [self.extremes[:,:1], summary,
-                        self.extremes[:,1:]], dim=-1)
+                [self.extremes[:, :1], summary,
+                 self.extremes[:, 1:]], dim=-1)
             weights = torch.cat(
-                    [torch.zeros(weights.shape[0], 1), weights,
-                        torch.zeros(weights.shape[0], 1)], dim=-1)
+                [torch.zeros(weights.shape[0], 1), weights,
+                 torch.zeros(weights.shape[0], 1)], dim=-1)
         return (summary, weights)
 
     def quantiles(self, quantiles, old_style=False):
@@ -532,19 +540,19 @@ class RunningQuantile:
         cumweights = torch.cumsum(weights, dim=-1) - weights / 2
         if old_style:
             # To be convenient with torch.percentile
-            cumweights -= cumweights[:,0:1].clone()
-            cumweights /= cumweights[:,-1:].clone()
+            cumweights -= cumweights[:, 0:1].clone()
+            cumweights /= cumweights[:, -1:].clone()
         else:
             cumweights /= torch.sum(weights, dim=-1, keepdim=True)
         result = torch.zeros(self.depth, quantiles.numel(),
-                dtype=self.dtype, device=self.device)
+                             dtype=self.dtype, device=self.device)
         # numpy is needed for interpolation
         nq = quantiles.view(-1).cpu().detach().numpy()
         ncw = cumweights.cpu().detach().numpy()
         nsm = summary.cpu().detach().numpy()
         for d in range(self.depth):
             result[d] = torch.tensor(numpy.interp(nq, ncw[d], nsm[d]),
-                    dtype=self.dtype, device=self.device)
+                                     dtype=self.dtype, device=self.device)
         return result.view((self.depth,) + qshape)
 
     def integrate(self, fun):
@@ -553,8 +561,8 @@ class RunningQuantile:
             if ff == 0:
                 continue
             term = torch.sum(
-                    fun(self.data[level][:,:ff]) * (2.0 ** level),
-                    dim=-1)
+                fun(self.data[level][:, :ff]) * (2.0 ** level),
+                dim=-1)
             if result is None:
                 result = term
             else:
@@ -568,7 +576,7 @@ class RunningQuantile:
 
     def readout(self, count=1001, old_style=True):
         return self.quantiles(
-                torch.linspace(0.0, 1.0, count), old_style=old_style)
+            torch.linspace(0.0, 1.0, count), old_style=old_style)
 
     def normalize(self, data):
         '''
@@ -588,7 +596,7 @@ class RunningQuantile:
         nsm = summary.cpu().numpy()
         for d in range(self.depth):
             normed = torch.tensor(numpy.interp(ndata[d], nsm[d], ncw[d]),
-                dtype=torch.float, device=data.device).clamp_(0.0, 1.0)
+                                  dtype=torch.float, device=data.device).clamp_(0.0, 1.0)
             if len(data.shape) > 1:
                 normed = normed.view(*(data.shape[1:]))
             result[d] = normed
@@ -612,8 +620,9 @@ class RunningConditionalQuantile:
     rcq.most_common_conditions(n) returns a list of the n most commonly
     added conditions so far.
     '''
+
     def __init__(self, r=3 * 1024, buffersize=None, seed=None,
-            state=None):
+                 state=None):
         self.first_rq = None
         self.call_stats = defaultdict(int)
         self.running_quantiles = {}
@@ -621,7 +630,7 @@ class RunningConditionalQuantile:
             self.set_state_dict(resolve_state_dict(state))
             return
         self.rq_args = dict(r=r, buffersize=buffersize,
-                seed=seed)
+                            seed=seed)
 
     def add(self, condition, incoming):
         if condition not in self.running_quantiles:
@@ -638,7 +647,7 @@ class RunningConditionalQuantile:
 
     def most_common_conditions(self, n):
         return sorted(self.call_stats.keys(),
-                key=lambda c: -self.call_stats[c])[:n]
+                      key=lambda c: -self.call_stats[c])[:n]
 
     def collected_add(self, conditions, incoming):
         for c in conditions:
@@ -658,20 +667,20 @@ class RunningConditionalQuantile:
 
     def collected_quantiles(self, conditions, quantiles, old_style=False):
         result = torch.zeros(
-                size=(len(conditions), self.first_rq.depth, len(quantiles)),
-                dtype=self.first_rq.dtype,
-                device=self.first_rq.device)
+            size=(len(conditions), self.first_rq.depth, len(quantiles)),
+            dtype=self.first_rq.dtype,
+            device=self.first_rq.device)
         for i, c in enumerate(conditions):
             if c in self.running_quantiles:
                 result[i] = self.running_quantiles[c].quantiles(
-                        quantiles, old_style)
+                    quantiles, old_style)
         return result
 
     def collected_normalize(self, conditions, values):
         result = torch.zeros(
-                size=(len(conditions), values.shape[0], values.shape[1]),
-                dtype=torch.float,
-                device=self.first_rq.device)
+            size=(len(conditions), values.shape[0], values.shape[1]),
+            dtype=torch.float,
+            device=self.first_rq.device)
         for i, c in enumerate(conditions):
             if c in self.running_quantiles:
                 result[i] = self.running_quantiles[c].normalize(values)
@@ -687,10 +696,10 @@ class RunningConditionalQuantile:
     def state_dict(self):
         conditions = sorted(self.running_quantiles.keys())
         result = dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                rq_args=self.rq_args,
-                conditions=conditions)
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            rq_args=self.rq_args,
+            conditions=conditions)
         for i, c in enumerate(conditions):
             result.update({
                 '%d.%s' % (i, k): v
@@ -706,8 +715,8 @@ class RunningConditionalQuantile:
                 p, s = k.split('.', 1)
                 subdicts[p][s] = v
         self.running_quantiles = {
-                c: RunningQuantile(state=subdicts[str(i)])
-                for i, c in enumerate(conditions)}
+            c: RunningQuantile(state=subdicts[str(i)])
+            for i, c in enumerate(conditions)}
         if conditions:
             self.first_rq = self.running_quantiles[conditions[0]]
 
@@ -724,6 +733,7 @@ class RunningVariance:
     Running computation of mean and variance. Use this when you just need
     basic stats without covariance.
     '''
+
     def __init__(self, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -738,7 +748,7 @@ class RunningVariance:
             a = a[None, :]
         if len(a.shape) > 2:
             a = (a.view(a.shape[0], a.shape[1], -1).permute(0, 2, 1)
-                    .contiguous().view(-1, a.shape[1]))
+                 .contiguous().view(-1, a.shape[1]))
         batch_count = a.shape[0]
         batch_mean = a.sum(0) / batch_count
         centered = a - batch_mean
@@ -778,12 +788,12 @@ class RunningVariance:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                count=self.count,
-                batchcount=self.batchcount,
-                mean=self._mean.cpu().numpy(),
-                cmom2=self.v_cmom2.cpu().numpy())
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            count=self.count,
+            batchcount=self.batchcount,
+            mean=self._mean.cpu().numpy(),
+            cmom2=self.v_cmom2.cpu().numpy())
 
     def set_state_dict(self, dic):
         self.count = dic['count'].item()
@@ -828,9 +838,9 @@ class RunningConditionalVariance:
     def state_dict(self):
         conditions = sorted(self.running_var.keys())
         result = dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                conditions=conditions)
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            conditions=conditions)
         for i, c in enumerate(conditions):
             result.update({
                 '%d.%s' % (i, k): v
@@ -845,8 +855,9 @@ class RunningConditionalVariance:
                 p, s = k.split('.', 1)
                 subdicts[p][s] = v
         self.running_var = {
-                c: RunningVariance(state=subdicts[str(i)])
-                for i, c in enumerate(conditions)}
+            c: RunningVariance(state=subdicts[str(i)])
+            for i, c in enumerate(conditions)}
+
 
 class RunningCrossCovariance:
     '''
@@ -857,6 +868,7 @@ class RunningCrossCovariance:
     Chan-style numerically stable update of mean and full covariance matrix.
     Chan, Golub. LeVeque. 1983. http://www.jstor.org/stable/2683386
     '''
+
     def __init__(self, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -873,7 +885,7 @@ class RunningCrossCovariance:
         assert(a.shape[0] == b.shape[0])
         if len(a.shape) > 2:
             a, b = [d.view(d.shape[0], d.shape[1], -1).permute(0, 2, 1
-                ).contiguous().view(-1, d.shape[1]) for d in [a, b]]
+                                                               ).contiguous().view(-1, d.shape[1]) for d in [a, b]]
         batch_count = a.shape[0]
         batch_mean = [d.sum(0) / batch_count for d in [a, b]]
         centered = [d - bm for d, bm in zip([a, b], batch_mean)]
@@ -885,8 +897,8 @@ class RunningCrossCovariance:
             self._mean = batch_mean
             self.v_cmom2 = [c.pow(2).sum(0) for c in centered]
             self.cmom2 = a.new(a.shape[1], b.shape[1]).zero_()
-            progress_addbmm(self.cmom2, centered[0][:,:,None],
-                    centered[1][:,None,:], sub_batch)
+            progress_addbmm(self.cmom2, centered[0][:, :, None],
+                            centered[1][:, None, :], sub_batch)
             return
         # Update a batch using Chan-style update for numerical stability.
         oldcount = self.count
@@ -894,14 +906,14 @@ class RunningCrossCovariance:
         new_frac = float(batch_count) / self.count
         # Update the mean according to the batch deviation from the old mean.
         delta = [bm.sub_(m).mul_(new_frac)
-                for bm, m in zip(batch_mean, self._mean)]
+                 for bm, m in zip(batch_mean, self._mean)]
         for m, d in zip(self._mean, delta):
             m.add_(d)
         # Update the cross-covariance using the batch deviation
-        progress_addbmm(self.cmom2, centered[0][:,:,None],
-                centered[1][:,None,:], sub_batch)
+        progress_addbmm(self.cmom2, centered[0][:, :, None],
+                        centered[1][:, None, :], sub_batch)
         self.cmom2.addmm_(alpha=new_frac * oldcount,
-                mat1=delta[0][:,None], mat2=delta[1][None,:])
+                          mat1=delta[0][:, None], mat2=delta[1][None, :])
         # Update the variance using the batch deviation
         for c, vc2, d in zip(centered, self.v_cmom2, delta):
             vc2.add_(c.pow(2).sum(0))
@@ -922,7 +934,7 @@ class RunningCrossCovariance:
     def correlation(self):
         covariance = self.covariance()
         rstdev = [s.reciprocal() for s in self.stdev()]
-        cor = rstdev[0][:,None] * covariance * rstdev[1][None,:]
+        cor = rstdev[0][:, None] * covariance * rstdev[1][None, :]
         # Remove NaNs
         cor[torch.isnan(cor)] = 0
         return cor
@@ -934,21 +946,22 @@ class RunningCrossCovariance:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                count=self.count,
-                mean_a=self._mean[0].cpu().numpy(),
-                mean_b=self._mean[1].cpu().numpy(),
-                cmom2_a=self.v_cmom2[0].cpu().numpy(),
-                cmom2_b=self.v_cmom2[1].cpu().numpy(),
-                cmom2=self.cmom2.cpu().numpy())
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            count=self.count,
+            mean_a=self._mean[0].cpu().numpy(),
+            mean_b=self._mean[1].cpu().numpy(),
+            cmom2_a=self.v_cmom2[0].cpu().numpy(),
+            cmom2_b=self.v_cmom2[1].cpu().numpy(),
+            cmom2=self.cmom2.cpu().numpy())
 
     def set_state_dict(self, dic):
         self.count = dic['count'].item()
         self._mean = [torch.from_numpy(dic[k]) for k in ['mean_a', 'mean_b']]
         self.v_cmom2 = [torch.from_numpy(dic[k])
-                for k in ['cmom2_a', 'cmom2_b']]
+                        for k in ['cmom2_a', 'cmom2_b']]
         self.cmom2 = torch.from_numpy(dic['cmom2'])
+
 
 class RunningCovariance:
     '''
@@ -958,6 +971,7 @@ class RunningCovariance:
     Chan-style numerically stable update of mean and full covariance matrix.
     Chan, Golub. LeVeque. 1983. http://www.jstor.org/stable/2683386
     '''
+
     def __init__(self, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -979,8 +993,8 @@ class RunningCovariance:
             self.count = batch_count
             self._mean = batch_mean
             self.cmom2 = a.new(a.shape[1], a.shape[1]).zero_()
-            progress_addbmm(self.cmom2, centered[:,:,None], centered[:,None,:],
-                    sub_batch)
+            progress_addbmm(self.cmom2, centered[:, :, None], centered[:, None, :],
+                            sub_batch)
             return
         # Update a batch using Chan-style update for numerical stability.
         oldcount = self.count
@@ -990,10 +1004,10 @@ class RunningCovariance:
         delta = batch_mean.sub_(self._mean).mul_(new_frac)
         self._mean.add_(delta)
         # Update the variance using the batch deviation
-        progress_addbmm(self.cmom2, centered[:,:,None], centered[:,None,:],
-                    sub_batch)
+        progress_addbmm(self.cmom2, centered[:, :, None], centered[:, None, :],
+                        sub_batch)
         self.cmom2.addmm_(
-            alpha=new_frac * oldcount, mat1=delta[:,None], mat2=delta[None,:])
+            alpha=new_frac * oldcount, mat1=delta[:, None], mat2=delta[None, :])
 
     def cpu_(self):
         self._mean = self._mean.cpu()
@@ -1005,7 +1019,7 @@ class RunningCovariance:
 
     def to_(self, device):
         self._mean, self.cmom2 = [m.to(device)
-                for m in [self._mean, self.cmom2]]
+                                  for m in [self._mean, self.cmom2]]
 
     def mean(self):
         return self._mean
@@ -1016,7 +1030,7 @@ class RunningCovariance:
     def correlation(self):
         covariance = self.covariance()
         rstdev = covariance.diag().sqrt().reciprocal()
-        return rstdev[:,None] * covariance * rstdev[None,:]
+        return rstdev[:, None] * covariance * rstdev[None, :]
 
     def variance(self):
         return self.covariance().diag()
@@ -1026,16 +1040,17 @@ class RunningCovariance:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                count=self.count,
-                mean=self._mean.cpu().numpy(),
-                cmom2=self.cmom2.cpu().numpy())
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            count=self.count,
+            mean=self._mean.cpu().numpy(),
+            cmom2=self.cmom2.cpu().numpy())
 
     def set_state_dict(self, dic):
         self.count = dic['count'].item()
         self._mean = torch.from_numpy(dic['mean'])
         self.cmom2 = torch.from_numpy(dic['cmom2'])
+
 
 class RunningSecondMoment:
     '''
@@ -1043,6 +1058,7 @@ class RunningSecondMoment:
     "covariance-like" matrix is needed, and when the whole matrix fits
     in the GPU.
     '''
+
     def __init__(self, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -1061,7 +1077,7 @@ class RunningSecondMoment:
         sub_batch = -(-(10 << 30) // (a.shape[1] * a.shape[1]))
         # Update the covariance using the batch deviation
         self.count += batch_count
-        progress_addbmm(self.mom2, a[:,:,None], a[:,None,:], sub_batch)
+        progress_addbmm(self.mom2, a[:, :, None], a[:, None, :], sub_batch)
 
     def cpu_(self):
         self.mom2 = self.mom2.cpu()
@@ -1077,20 +1093,22 @@ class RunningSecondMoment:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                count=self.count,
-                mom2=self.mom2.cpu().numpy())
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            count=self.count,
+            mom2=self.mom2.cpu().numpy())
 
     def set_state_dict(self, dic):
         self.count = dic['count'].item()
         self.mom2 = torch.from_numpy(dic['mom2'])
+
 
 class RunningBincount:
     '''
     Running bincount.  The counted array should be an integer type with
     non-negative integers.  Also
     '''
+
     def __init__(self, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -1133,14 +1151,15 @@ class RunningBincount:
 
     def state_dict(self):
         return dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                count=self.count,
-                bincount=self._bincount.cpu().numpy())
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            count=self.count,
+            bincount=self._bincount.cpu().numpy())
 
     def set_state_dict(self, dic):
         self.count = dic['count'].item()
         self._bincount = torch.from_numpy(dic['bincount'])
+
 
 def progress_addbmm(accum, x, y, batch_size):
     '''
@@ -1150,19 +1169,21 @@ def progress_addbmm(accum, x, y, batch_size):
     if x.shape[0] <= batch_size:
         return accum.addbmm_(x, y)
     for i in pbar(range(0, x.shape[0], batch_size), desc='bmm'):
-        accum.addbmm_(x[i:i+batch_size], y[i:i+batch_size])
+        accum.addbmm_(x[i:i + batch_size], y[i:i + batch_size])
     return accum
 
 
 def sample_portion(vec, p=0.5):
     bits = torch.bernoulli(torch.zeros(vec.shape[0], dtype=torch.uint8,
-        device=vec.device), p)
+                                       device=vec.device), p)
     return vec[bits]
+
 
 def resolve_state_dict(s):
     if isinstance(s, str):
         return numpy.load(s, allow_pickle=True)
     return s
+
 
 if __name__ == '__main__':
     import warnings
@@ -1184,11 +1205,11 @@ if __name__ == '__main__':
     data /= 2
     depth = 50
     test_cuda = torch.cuda.is_available()
-    alldata = data[:,None] + (numpy.arange(depth) * amount)[None, :]
+    alldata = data[:, None] + (numpy.arange(depth) * amount)[None, :]
     actual_sum = torch.FloatTensor(numpy.sum(alldata * alldata, axis=0))
     amt = amount // depth
     for r in range(depth):
-        numpy.random.shuffle(alldata[r*amt:r*amt+amt,r])
+        numpy.random.shuffle(alldata[r * amt:r * amt + amt, r])
     if args.mode == 'cuda':
         alldata = torch.cuda.FloatTensor(alldata)
         dtype = torch.float
@@ -1210,30 +1231,30 @@ if __name__ == '__main__':
     actual_sum *= 2
     ro = qc.readout(1001).cpu()
     endtime = time.time()
-    gt = torch.linspace(0, amount, quantiles+1)[None,:] + (
-            torch.arange(qc.depth, dtype=torch.float) * amount)[:,None]
+    gt = torch.linspace(0, amount, quantiles + 1)[None, :] + (
+        torch.arange(qc.depth, dtype=torch.float) * amount)[:, None]
     maxreldev = torch.max(torch.abs(ro - gt) / amount) * quantiles
     print("Maximum relative deviation among %d perentiles: %f" % (
         quantiles, maxreldev))
-    minerr = torch.max(torch.abs(qc.minmax().cpu()[:,0] -
-            torch.arange(qc.depth, dtype=torch.float) * amount))
+    minerr = torch.max(torch.abs(qc.minmax().cpu()[:, 0] -
+                                 torch.arange(qc.depth, dtype=torch.float) * amount))
     maxerr = torch.max(torch.abs((qc.minmax().cpu()[:, -1] + 1) -
-            (torch.arange(qc.depth, dtype=torch.float) + 1) * amount))
+                                 (torch.arange(qc.depth, dtype=torch.float) + 1) * amount))
     print("Minmax error %f, %f" % (minerr, maxerr))
     interr = torch.max(torch.abs(qc.integrate(lambda x: x * x).cpu()
-            - actual_sum) / actual_sum)
+                                 - actual_sum) / actual_sum)
     print("Integral error: %f" % interr)
     medianerr = torch.max(torch.abs(qc.median() -
-        alldata.median(0)[0]) / alldata.median(0)[0]).cpu()
+                                    alldata.median(0)[0]) / alldata.median(0)[0]).cpu()
     print("Median error: %f" % interr)
     meanerr = torch.max(
-            torch.abs(qc.mean() - alldata.mean(0)) / alldata.mean(0)).cpu()
+        torch.abs(qc.mean() - alldata.mean(0)) / alldata.mean(0)).cpu()
     print("Mean error: %f" % meanerr)
     varerr = torch.max(
-            torch.abs(qc.variance() - alldata.var(0)) / alldata.var(0)).cpu()
+        torch.abs(qc.variance() - alldata.var(0)) / alldata.var(0)).cpu()
     print("Variance error: %f" % varerr)
     counterr = ((qc.integrate(lambda x: torch.ones(x.shape[-1]).cpu())
-                - qc.size()) / (0.0 + qc.size())).item()
+                 - qc.size()) / (0.0 + qc.size())).item()
     print("Count error: %f" % counterr)
     print("Time %f" % (endtime - starttime))
     # Algorithm is randomized, so some of these will fail with low probability.
@@ -1249,6 +1270,7 @@ class RunningAllIntersectionAndUnion:
     '''
     Running computation of intersections and unions of two binary vectors.
     '''
+
     def __init__(self, state=None):
         if state is not None:
             self.set_state_dict(resolve_state_dict(state))
@@ -1262,8 +1284,8 @@ class RunningAllIntersectionAndUnion:
         assert len(S.shape) == 2 and len(G.shape) == 2
         assert S.dtype == torch.bool and G.dtype == torch.bool
         assert len(S) == len(G), f'{len(S)} vs {len(G)}'
-        S = S.float() # CUDA only supports mm on float...
-        G = G.float() # otherwise we would use integers.
+        S = S.float()  # CUDA only supports mm on float...
+        G = G.float()  # otherwise we would use integers.
         intersection = torch.mm(S.t(), G)
         ssum = S.sum(0)
         gsum = G.sum(0)
@@ -1281,7 +1303,7 @@ class RunningAllIntersectionAndUnion:
         return self.count
 
     def iou(self):
-        union = self.total_a[:,None] + self.total_b[None,:] - self.intersection
+        union = self.total_a[:, None] + self.total_b[None, :] - self.intersection
         out = self.intersection / (union + 1e-20)
         return out
 
@@ -1291,7 +1313,7 @@ class RunningAllIntersectionAndUnion:
         self.intersection = self.intersection.to(_device)
 
     def state_dict(self):
-        return dict(constructor = self.__module__ + '.' +
+        return dict(constructor=self.__module__ + '.' +
                     self.__class__.__name__ + '()',
                     count=self.count,
                     total_a=self.total_a.cpu().numpy(),
@@ -1303,6 +1325,7 @@ class RunningAllIntersectionAndUnion:
         self.total_a = torch.tensor(dic['total_a'])
         self.total_b = torch.tensor(dic['total_b'])
         self.intersection = torch.tensor(dic['intersection'])
+
 
 class RunningConditionalVariance:
     def __init__(self, state=None):
@@ -1340,9 +1363,9 @@ class RunningConditionalVariance:
     def state_dict(self):
         conditions = sorted(self.running_var.keys())
         result = dict(
-                constructor=self.__module__ + '.' +
-                    self.__class__.__name__ + '()',
-                conditions=conditions)
+            constructor=self.__module__ + '.' +
+            self.__class__.__name__ + '()',
+            conditions=conditions)
         for i, c in enumerate(conditions):
             result.update({
                 '%d.%s' % (i, k): v
@@ -1357,6 +1380,5 @@ class RunningConditionalVariance:
                 p, s = k.split('.', 1)
                 subdicts[p][s] = v
         self.running_var = {
-                c: RunningVariance(state=subdicts[str(i)])
-                for i, c in enumerate(conditions)}
-
+            c: RunningVariance(state=subdicts[str(i)])
+            for i, c in enumerate(conditions)}

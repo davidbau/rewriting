@@ -16,10 +16,12 @@ import numpy
 import random
 from torch.utils.data.sampler import Sampler
 
+
 class FixedSubsetSampler(Sampler):
     """Represents a fixed sequence of data set indices.
     Subsets can be created by specifying a subset of output indexes.
     """
+
     def __init__(self, samples):
         self.samples = samples
 
@@ -50,6 +52,7 @@ class FixedRandomSubsetSampler(FixedSubsetSampler):
         sample_size,
         seed (optional)
     """
+
     def __init__(self, data_source, start=None, end=None, seed=1):
         rng = random.Random(seed)
         shuffled = list(range(len(data_source)))
@@ -62,11 +65,12 @@ class FixedRandomSubsetSampler(FixedSubsetSampler):
         Returns only the subset matching the given rule.
         '''
         if isinstance(class_filter, int):
-            rule = lambda d: d[1] == class_filter
+            def rule(d): return d[1] == class_filter
         else:
             rule = class_filter
         return self.subset([i for i, j in enumerate(self.samples)
-                if rule(self.data_source[j])])
+                            if rule(self.data_source[j])])
+
 
 def coordinate_sample(shape, sample_size, seeds, grid=13, seed=1, flat=False):
     '''
@@ -91,7 +95,7 @@ def coordinate_sample(shape, sample_size, seeds, grid=13, seed=1, flat=False):
         uniform = (square + rng.uniform(size=square.shape)) / grid
         # TODO: support affine scaling so that we can align receptive field
         # centers exactly when sampling neurons in different layers.
-        coords = (uniform * numpy.array(shape)[:,None]).astype(int)
+        coords = (uniform * numpy.array(shape)[:, None]).astype(int)
         # Now take sample_size without replacement.  We do this in a way
         # such that if sample_size is decreased or increased up to 'grid',
         # the selected points become a subset, not totally different points.
@@ -101,12 +105,15 @@ def coordinate_sample(shape, sample_size, seeds, grid=13, seed=1, flat=False):
             sampind[j] = coords
     return sampind
 
+
 def main():
     from . import parallelfolder
-    import argparse, os, shutil
+    import argparse
+    import os
+    import shutil
 
     parser = argparse.ArgumentParser(description='Net dissect utility',
-            prog='python -m %s.sampler' % __package__)
+                                     prog='python -m %s.sampler' % __package__)
     parser.add_argument('indir')
     parser.add_argument('outdir')
     parser.add_argument('--size', type=int, default=100)
@@ -119,6 +126,7 @@ def main():
     dataset = parallelfolder.ParallelImageFolders([args.indir])
     sampler = FixedRandomSubsetSampler(dataset, end=args.size)
     seen_filenames = set()
+
     def number_filename(filename, number):
         if '.' in filename:
             a, b = filename.rsplit('.', 1)
@@ -134,28 +142,29 @@ def main():
             filename = number_filename(template, num)
         seen_filenames.add(filename)
         shutil.copy(os.path.join(args.indir, sourcefile),
-                os.path.join(args.outdir, filename))
+                    os.path.join(args.outdir, filename))
+
 
 def test():
     from numpy.testing import assert_almost_equal
     # Test that coordinate_sample is deterministic, in-range, and scalable.
     assert_almost_equal(coordinate_sample((26, 26), 10, range(101, 102)),
-            [[[14,  0, 12, 11,  8, 13, 11, 20,  7, 20],
-              [ 9, 22,  7, 11, 23, 18, 21, 15,  2,  5]]])
+                        [[[14,  0, 12, 11,  8, 13, 11, 20,  7, 20],
+                          [9, 22,  7, 11, 23, 18, 21, 15,  2,  5]]])
     assert_almost_equal(coordinate_sample((13, 13), 10, range(101, 102)),
-            [[[ 7,  0,  6,  5,  4,  6,  5, 10,  3, 20 // 2],
-              [ 4, 11,  3,  5, 11,  9, 10,  7,  1,  5 // 2]]])
+                        [[[7,  0,  6,  5,  4,  6,  5, 10,  3, 20 // 2],
+                          [4, 11,  3,  5, 11,  9, 10,  7,  1,  5 // 2]]])
     assert_almost_equal(coordinate_sample((13, 13), 10, range(100, 102),
-        flat=True),
-            [[  8,  24,  67, 103,  87,  79, 138,  94,  98,  53],
-             [ 95,  11,  81,  70,  63,  87,  75, 137,  40, 2+10*13]])
+                                          flat=True),
+                        [[8,  24,  67, 103,  87,  79, 138,  94,  98,  53],
+                         [95,  11,  81,  70,  63,  87,  75, 137,  40, 2 + 10 * 13]])
     assert_almost_equal(coordinate_sample((13, 13), 10, range(101, 103),
-        flat=True),
-            [[ 95,  11,  81,  70,  63,  87,  75, 137,  40, 132],
-             [  0,  78, 114, 111,  66,  45,  72,  73,  79, 135]])
+                                          flat=True),
+                        [[95,  11,  81,  70,  63,  87,  75, 137,  40, 132],
+                         [0,  78, 114, 111,  66,  45,  72,  73,  79, 135]])
     assert_almost_equal(coordinate_sample((26, 26), 10, range(101, 102),
-        flat=True),
-            [[373,  22, 319, 297, 231, 356, 307, 535, 184, 5+20*26]])
+                                          flat=True),
+                        [[373,  22, 319, 297, 231, 356, 307, 535, 184, 5 + 20 * 26]])
     # Test FixedRandomSubsetSampler
     fss = FixedRandomSubsetSampler(range(10))
     assert len(fss) == 10
@@ -164,9 +173,10 @@ def test():
     assert len(fss) == 5
     assert_almost_equal(list(fss), [7, 5, 3, 0, 4])
     fss = FixedRandomSubsetSampler([(i, i % 3) for i in range(10)]
-            ).class_subset(class_filter=1)
+                                   ).class_subset(class_filter=1)
     assert len(fss) == 3
     assert_almost_equal(list(fss), [7, 4, 1])
+
 
 if __name__ == '__main__':
     import sys

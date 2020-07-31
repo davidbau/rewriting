@@ -8,17 +8,25 @@
 # - show an array of arrays to horizontally lay them out as inline blocks.
 # - show an array of tuples to create a table.
 
-import PIL.Image, base64, io, IPython, types, sys
+import PIL.Image
+import base64
+import io
+import IPython
+import types
+import sys
 import html as html_module
 from IPython.display import display
 
 g_buffer = None
 
+
 def blocks(obj, space=''):
     return IPython.display.HTML(space.join(blocks_tags(obj)))
 
+
 def rows(obj, space=''):
     return IPython.display.HTML(space.join(rows_tags(obj)))
+
 
 def rows_tags(obj):
     if isinstance(obj, dict):
@@ -29,12 +37,13 @@ def rows_tags(obj):
         results.append('<tr style="padding:0">')
         for item in row:
             results.append('<td style="text-align:left; vertical-align:top;' +
-                'padding:1px">')
+                           'padding:1px">')
             results.extend(blocks_tags(item))
             results.append('</td>')
         results.append('</tr>')
     results.append('</table>')
     return results
+
 
 def blocks_tags(obj):
     results = []
@@ -56,16 +65,16 @@ def blocks_tags(obj):
             except:
                 pass
         blockstart, blockend, tstart, tend, rstart, rend, cstart, cend = [
-          '<div style="display:inline-block;text-align:center;line-height:1;' +
-              'vertical-align:top;padding:1px">',
-          '</div>',
-          '<table style="display:inline-table">',
-          '</table>',
-          '<tr style="padding:0">',
-          '</tr>',
-          '<td style="text-align:left; vertical-align:top; padding:1px">',
-          '</td>',
-          ]
+            '<div style="display:inline-block;text-align:center;line-height:1;' +
+            'vertical-align:top;padding:1px">',
+            '</div>',
+            '<table style="display:inline-table">',
+            '</table>',
+            '<tr style="padding:0">',
+            '</tr>',
+            '<td style="text-align:left; vertical-align:top; padding:1px">',
+            '</td>',
+        ]
         needs_end = False
         table_mode = False
         for i, line in enumerate(obj):
@@ -94,17 +103,21 @@ def blocks_tags(obj):
             results.append(table_mode and tend or blockend)
     return results
 
+
 def pil_to_b64(img, format='png'):
     buffered = io.BytesIO()
     img.save(buffered, format=format)
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
+
 def pil_to_url(img, format='png'):
     return 'data:image/%s;base64,%s' % (format, pil_to_b64(img, format))
+
 
 def pil_to_html(img, margin=1):
     mattr = ' style="margin:%dpx"' % margin
     return '<img src="%s"%s>' % (pil_to_url(img), mattr)
+
 
 def a(x, cols=None):
     global g_buffer
@@ -114,9 +127,11 @@ def a(x, cols=None):
     if cols is not None and len(g_buffer) >= cols:
         flush()
 
+
 def reset():
     global g_buffer
     g_buffer = None
+
 
 def flush(*args, **kwargs):
     global g_buffer
@@ -125,20 +140,25 @@ def flush(*args, **kwargs):
         g_buffer = None
         display(blocks(x, *args, **kwargs))
 
+
 def show(x=None, *args, **kwargs):
     flush(*args, **kwargs)
     if x is not None:
         display(blocks(x, *args, **kwargs))
 
+
 def html(obj, space=''):
     return blocks(obj, space)._repr_html_()
+
 
 class CallableModule(types.ModuleType):
     def __init__(self):
         # or super().__init__(__name__) for Python 3
         types.ModuleType.__init__(self, __name__)
         self.__dict__.update(sys.modules[__name__].__dict__)
+
     def __call__(self, x=None, *args, **kwargs):
         show(x, *args, **kwargs)
+
 
 sys.modules[__name__] = CallableModule()

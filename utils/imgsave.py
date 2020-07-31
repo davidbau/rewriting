@@ -14,8 +14,9 @@ def all_items_and_filenames(img_array, filename_pattern, index=()):
             yield data, (filename_pattern % inner_index)
         else:
             for img, name in all_items_and_filenames(data, filename_pattern,
-                    inner_index):
+                                                     inner_index):
                 yield img, name
+
 
 def expand_last_filename(img_array, filename_pattern):
     index, data = (), img_array
@@ -24,12 +25,14 @@ def expand_last_filename(img_array, filename_pattern):
         data = data[len(data) - 1]
     return filename_pattern % index
 
+
 def num_items(img_array):
     num = 1
     while not PIL.Image.isImageType(img_array):
-       num *= len(img_array)
-       img_array = img_array[-1]
+        num *= len(img_array)
+        img_array = img_array[-1]
     return num
+
 
 def save_image_set(img_array, filename_pattern, sourcefile=None):
     '''
@@ -40,8 +43,7 @@ def save_image_set(img_array, filename_pattern, sourcefile=None):
     if sourcefile is not None:
         last_filename = expand_last_filename(img_array, filename_pattern)
         # Do nothing if the last file exists and is newer than the sourcefile
-        if os.path.isfile(last_filename) and (os.path.getmtime(last_filename)
-                >= os.path.getmtime(sourcefile)):
+        if os.path.isfile(last_filename) and (os.path.getmtime(last_filename) >= os.path.getmtime(sourcefile)):
             pbar.descnext(None)
             return
     # Use multiple threads to write all the image files faster.
@@ -52,10 +54,12 @@ def save_image_set(img_array, filename_pattern, sourcefile=None):
         pool.add(img, filename)
     pool.join()
 
+
 class SaveImageWorker(WorkerBase):
     def work(self, img, filename, quality=99):
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         img.save(filename, optimize=True, quality=quality)
+
 
 class SaveImagePool(WorkerPool):
     def __init__(self, *args, **kwargs):

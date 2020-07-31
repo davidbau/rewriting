@@ -5,8 +5,13 @@ InstrumentedModel will wrap a pytorch model and allow hooking
 arbitrary layers to monitor or modify their output directly.
 '''
 
-import torch, numpy, types, copy, inspect
+import torch
+import numpy
+import types
+import copy
+import inspect
 from collections import OrderedDict, defaultdict
+
 
 class InstrumentedModel(torch.nn.Module):
     '''
@@ -185,9 +190,10 @@ class InstrumentedModel(torch.nn.Module):
             raise ValueError('Layer %s already hooked' % layername)
         self._hooked_layer[aka] = layername
         self._old_forward[layername] = (layer, aka,
-                layer.__dict__.get('forward', None))
+                                        layer.__dict__.get('forward', None))
         editor = self
         original_forward = layer.forward
+
         def new_forward(self, *inputs, **kwargs):
             original_x = original_forward(*inputs, **kwargs)
             x = editor._postprocess_forward(original_x, aka)
@@ -243,13 +249,14 @@ class InstrumentedModel(torch.nn.Module):
         model = self.model
         self._hooked_layer['.'] = '.'
         self._old_forward['.'] = (model, '.',
-                model.__dict__.get('forward', None))
+                                  model.__dict__.get('forward', None))
+
         def new_forward(this, x, layer=None, first_layer=None, last_layer=None):
             # TODO: decide whether to support hierarchical names here.
             assert layer is None or (first_layer is None and last_layer is None)
             first_layer, last_layer = [str(layer) if layer is not None
-                    else str(d) if d is not None else None
-                    for d in [first_layer, last_layer]]
+                                       else str(d) if d is not None else None
+                                       for d in [first_layer, last_layer]]
             including_children = (first_layer is None)
             for name, layer in this._modules.items():
                 if name == first_layer:
@@ -273,6 +280,7 @@ class InstrumentedModel(torch.nn.Module):
             self._unhook_layer(aka)
         assert len(self._old_forward) == 0
 
+
 def apply_ablation_replacement(x, imodel, **buffers):
     if buffers is not None:
         # Apply any edits requested.
@@ -283,6 +291,7 @@ def apply_ablation_replacement(x, imodel, **buffers):
             if v is not None:
                 x += (v * a)
     return x
+
 
 def make_matching_tensor(valuedict, name, data):
     '''
@@ -305,13 +314,14 @@ def make_matching_tensor(valuedict, name, data):
         # Ensure dimensions are unsqueezed as needed.
         assert not v.requires_grad, '%s wrong dimensions' % (name)
         v = v.view((1,) + tuple(v.shape) +
-                (1,) * (len(data.shape) - len(v.shape) - 1))
+                   (1,) * (len(data.shape) - len(v.shape) - 1))
         valuedict[name] = v
     return v
 
+
 def subsequence(sequential, first_layer=None, last_layer=None,
-        after_layer=None, upto_layer=None, single_layer=None,
-        share_weights=False):
+                after_layer=None, upto_layer=None, single_layer=None,
+                share_weights=False):
     '''
     Creates a subsequence of a pytorch Sequential model, copying over
     modules together with parameters for the subsequence.  Only
@@ -324,18 +334,18 @@ def subsequence(sequential, first_layer=None, last_layer=None,
     and their parameters without copying them.  Otherwise, by default,
     makes a separate brand-new copy.
     '''
-    assert ((single_layer is None) or
-            (first_layer is last_layer is after_layer is upto_layer is None))
+    assert ((single_layer is None) or (first_layer is last_layer is after_layer is upto_layer is None))
     if single_layer is not None:
         first_layer = single_layer
         last_layer = single_layer
     first, last, after, upto = [None if d is None else d.split('.')
-            for d in [first_layer, last_layer, after_layer, upto_layer]]
+                                for d in [first_layer, last_layer, after_layer, upto_layer]]
     return hierarchical_subsequence(sequential, first=first, last=last,
-            after=after, upto=upto, share_weights=share_weights)
+                                    after=after, upto=upto, share_weights=share_weights)
+
 
 def hierarchical_subsequence(sequential, first, last, after, upto,
-        share_weights=False, depth=0):
+                             share_weights=False, depth=0):
     '''
     Recursive helper for subsequence() to support descent into dotted
     layer names.  In this helper, first, last, after, and upto are
@@ -351,9 +361,9 @@ def hierarchical_subsequence(sequential, first, last, after, upto,
     including_children = (first is None) and (after is None)
     included_children = OrderedDict()
     (F, FN), (L, LN), (A, AN), (U, UN) = [
-            (d[depth], (None if len(d) == depth+1 else d))
-            if d is not None else (None, None)
-            for d in [first, last, after, upto]]
+        (d[depth], (None if len(d) == depth + 1 else d))
+        if d is not None else (None, None)
+        for d in [first, last, after, upto]]
     for name, layer in sequential._modules.items():
         if name == F:
             first = None
@@ -366,10 +376,10 @@ def hierarchical_subsequence(sequential, first, last, after, upto,
             including_children = False
         if including_children:
             FR, LR, AR, UR = [n if n is None or n[depth] == name else None
-                    for n in [FN, LN, AN, UN]]
+                              for n in [FN, LN, AN, UN]]
             chosen = hierarchical_subsequence(layer,
-                    first=FR, last=LR, after=AR, upto=UR,
-                    share_weights=share_weights, depth=depth+1)
+                                              first=FR, last=LR, after=AR, upto=UR,
+                                              share_weights=share_weights, depth=depth + 1)
             if chosen is not None:
                 included_children[name] = chosen
         if name == L:
@@ -390,6 +400,7 @@ def hierarchical_subsequence(sequential, first, last, after, upto,
         return None
     return torch.nn.Sequential(included_children)
 
+
 def set_requires_grad(requires_grad, *models):
     for model in models:
         if isinstance(model, torch.nn.Module):
@@ -400,14 +411,14 @@ def set_requires_grad(requires_grad, *models):
         else:
             assert False, 'unknown type %r' % type(model)
 
+
 def invoke_with_optional_args(fn, *args, **kwargs):
     argspec = inspect.getfullargspec(fn)
     kwtaken = 0
     if argspec.varkw is None:
         kwtaken = len([k for k in kwargs if k in argspec.args])
         kwargs = {k: v for k, v in kwargs.items()
-                if k in argspec.args or
-                argspec.kwonlyargs and k in argspec.kwonlyargs}
+                  if k in argspec.args or argspec.kwonlyargs and k in argspec.kwonlyargs}
     if argspec.varargs is None:
         args = args[:len(argspec.args) - kwtaken]
     return fn(*args, **kwargs)

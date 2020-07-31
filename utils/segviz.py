@@ -1,12 +1,18 @@
-import numpy, scipy, PIL, torch
+import numpy
+import scipy
+import PIL
+import torch
+
 
 def seg_as_image(seg, size=None):
     return PIL.Image.fromarray(
-            segment_visualization(seg.cpu().numpy(), size=size))
+        segment_visualization(seg.cpu().numpy(), size=size))
+
 
 def swatch_image(label, size=15):
     return PIL.Image.new("RGB", (size, size), tuple(high_contrast[
         label % len(high_contrast)]))
+
 
 def segment_key(seg, segmodel, max_labels=6):
     seglabels, _ = segmodel.get_label_and_category_names()
@@ -18,11 +24,12 @@ def segment_key(seg, segmodel, max_labels=6):
         result.append((swatch_image(ind), seglabels[ind][0]))
     return result
 
+
 def segment_visualization(seg, size=None):
     # Handle both 2d tensor (single label segmentation) and 3d tensor
     # (multilabel segmentation)
     if len(seg.shape) == 2:
-        seg = seg[None,:,:]
+        seg = seg[None, :, :]
     result = numpy.zeros((seg.shape[1] * seg.shape[2], 3), dtype=numpy.uint8)
     flatseg = seg.reshape(seg.shape[0], seg.shape[1] * seg.shape[2])
     bc = numpy.bincount(flatseg.flatten())
@@ -44,12 +51,13 @@ def segment_visualization(seg, size=None):
         result = scipy.ndimage.zoom(result, zoom_ratio, order=0)
     return result
 
+
 # A palette that maximizes perceptual contrast between entries.
 # https://stackoverflow.com/questions/33295120
 high_contrast = [
     [0, 0, 0], [255, 255, 0], [28, 230, 255], [255, 52, 255],
     [0, 137, 65],   # tree - it green
-    [183, 151, 98], # building - make it brownish
+    [183, 151, 98],  # building - make it brownish
     [0, 111, 166], [163, 0, 89],
     [255, 219, 229], [122, 73, 0], [0, 0, 166], [99, 255, 172],
     [255, 74, 70],  # chair - make it orange red

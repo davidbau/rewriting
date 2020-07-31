@@ -22,8 +22,11 @@ that come from python.
 TODO: Support jupyterlab also.
 """
 
-import json, html, re
+import json
+import html
+import re
 from inspect import signature
+
 
 class Model(object):
     '''
@@ -42,6 +45,7 @@ class Model(object):
     In both these cases, any registered listeners will be called
     with the given value.
     '''
+
     def on(self, name, cb):
         '''
         Registers a listener for named events and properties.
@@ -68,7 +72,7 @@ class Model(object):
         curvalue = super().__getattribute__(name)
         if not isinstance(curvalue, Trigger):
             raise AttributeError('%s not a property or trigger but %s'
-                    % (name, str(type(curvalue))))
+                                 % (name, str(type(curvalue))))
         return curvalue
 
     def _initprop_(self, name, value):
@@ -108,6 +112,7 @@ class Model(object):
         if isinstance(curvalue, Property):
             return curvalue.value
         return curvalue
+
 
 class Widget(Model):
     '''
@@ -159,8 +164,9 @@ class Widget(Model):
         # Each call to _repr_html_ creates a unique view instance.
         self._viewcount = 0
         # Python notification is handled by Property objects.
+
         def handle_remote_set(name, value):
-            with capture_output(self): # make errors visible.
+            with capture_output(self):  # make errors visible.
                 self.prop(name).trigger(value)
         self._recv_from_js_(handle_remote_set)
         # The style and data properties come standard, and are used to
@@ -205,15 +211,14 @@ class Widget(Model):
                 class_attr(self.className) +
                 data_attrs(self.data))
 
-
     def _repr_html_(self):
         '''
         Returns the HTML code for the widget.
         '''
         self._viewcount += 1
         json_data = json.dumps({
-                k: v.value for k, v in vars(self).items()
-                if isinstance(v, Property)})
+            k: v.value for k, v in vars(self).items()
+            if isinstance(v, Property)})
         json_data = re.sub('</', '<\\/', json_data)
 
         std_widget_js = minify(f'''
@@ -235,18 +240,19 @@ class Widget(Model):
         ''')
 
         return ''.join([
-          self.widget_html(),
-          '<script>(function() {',
-          WIDGET_MODEL_JS,
-          std_widget_js,
-          self.widget_js(),
-          '})();</script>'
-        ]);
+            self.widget_html(),
+            '<script>(function() {',
+            WIDGET_MODEL_JS,
+            std_widget_js,
+            self.widget_js(),
+            '})();</script>'
+        ])
 
     def _initprop_(self, name, value):
         if not hasattr(self, '_viewcount'):
             raise ValueError('base Model __init__ must be called')
         super()._initprop_(name, value)
+
         def notify_js(event):
             self._send_to_js_(id(self), name, event.value)
         if isinstance(value, Trigger):
@@ -274,9 +280,11 @@ class Widget(Model):
             def handle_comm(msg):
                 fn(*(msg['content']['data']))
                 # TODO: handle closing also.
+
             def handle_close(close_msg):
                 comm_id = close_msg['content']['comm_id']
                 self._comms = [c for c in self._comms if c.comm_id != comm_id]
+
             def open_comm(comm, open_msg):
                 self._comms.append(comm)
                 comm.on_msg(handle_comm)
@@ -296,6 +304,7 @@ class Widget(Model):
         display(self)
         return self
 
+
 class Trigger(object):
     """
     Trigger is the base class for Property and other data-bound
@@ -311,12 +320,14 @@ class Trigger(object):
     root Trigger to be handled.  By default, the root handler accepts
     events by notifying all listeners and children in the tree.
     """
+
     def __init__(self):
         self._listeners = []
         self.parent = None
         # name and target are set in Model._initprop_.
         self.name = None
         self.target = None
+
     def handle(self, value):
         '''
         Method to override; called at the root when an event has been
@@ -324,6 +335,7 @@ class Trigger(object):
         default notifies all listeners.
         '''
         self.notify(value)
+
     def trigger(self, value=None):
         '''
         Triggers an event to be handled by the root.  By default, the root
@@ -333,6 +345,7 @@ class Trigger(object):
             self.parent.trigger(value)
         else:
             self.handle(value)
+
     def set(self, value):
         '''
         Sets the parent Trigger.  Child Triggers trigger events by
@@ -352,6 +365,7 @@ class Trigger(object):
             self.parent.on(self.handle, internal=True)
         elif not isinstance(self, Property):
             raise ValueError('only properties can be set to a value')
+
     def notify(self, value=None):
         '''
         Notifies listeners and children.  If a listener accepts an argument,
@@ -364,32 +378,37 @@ class Trigger(object):
                     # print(f'silenced recursive {self.name} {cb.__name__}')
                     pass
                 elif len(signature(cb).parameters) == 0:
-                    cb() # no-parameter callback.
+                    cb()  # no-parameter callback.
                 else:
                     cb(Event(value, self.name, self.target))
+
     def on(self, cb, internal=False):
         '''
         Registers a listener.  Calling multiple times registers
         multiple listeners.
         '''
         self._listeners.append((cb, internal))
+
     def off(self, cb=None):
         '''
         Unregisters a listener.
         '''
         self._listeners = [(c, i) for c, i in self._listeners
-                if c != cb and cb is not None]
+                           if c != cb and cb is not None]
+
 
 class Property(Trigger):
     """
     A Property is just an Trigger that remembers its last value.
     """
+
     def __init__(self, value=None):
         '''
         Can be initialized with a starting value.
         '''
         super().__init__()
         self.set(value)
+
     def handle(self, value):
         '''
         The default handling for a Property is to store the value,
@@ -398,6 +417,7 @@ class Property(Trigger):
         '''
         self.value = value
         self.notify(value)
+
     def set(self, value):
         '''
         When a Property value is set to an ordinary value, it
@@ -414,6 +434,7 @@ class Property(Trigger):
         else:
             self.trigger(value)
 
+
 class Event(object):
     def __init__(self, value, name, target, **kwargs):
         for k, v in kwargs.items():
@@ -422,39 +443,49 @@ class Event(object):
         self.name = name
         self.target = target
 
+
 entered_handler_stack = []
+
+
 class enter_handler(object):
     def __init__(self, name, internal):
         global entered_handler_stack
         self.internal = internal
         self.name = name
         self.silence = (not internal) and (len(entered_handler_stack) > 0)
+
     def __enter__(self):
         global entered_handler_stack
         if not self.internal:
             entered_handler_stack.append(self)
         return self
+
     def __exit__(self, exc_type, exc_value, exc_tb):
         global entered_handler_stack
         if not self.internal:
             entered_handler_stack.pop()
+
 
 class capture_output(object):
     """Context manager for capturing stdout/stderr.  This is used,
     by default, to wrap handler code that is invoked by a triggering
     event coming from javascript.  Any stdout/stderr or exceptions
     that are thrown are formatted and written above the relevant widget."""
+
     def __init__(self, widget):
         from io import StringIO
         self.widget = widget
         self.buffer = StringIO()
+
     def __enter__(self):
         import sys
         self.saved = dict(stdout=sys.stdout, stderr=sys.stderr)
         sys.stdout = self.buffer
         sys.stderr = self.buffer
+
     def __exit__(self, exc_type, exc_value, exc_tb):
-        import sys, traceback
+        import sys
+        import traceback
         captured = self.buffer.getvalue()
         if len(captured):
             self.widget.write.trigger(f'<pre>{html.escape(captured)}</pre>')
@@ -463,13 +494,13 @@ class capture_output(object):
             tbtxt = ''.join(
                     traceback.format_exception(exc_type, exc_value, exc_tb))
             self.widget.write.trigger(
-                    f'<pre style="color:red;text-align:left">{tbtxt}</pre>')
+                f'<pre style="color:red;text-align:left">{tbtxt}</pre>')
         sys.stdout = self.saved['stdout']
         sys.stderr = self.saved['stderr']
 
 
 ##########################################################################
-## Specific widgets
+# Specific widgets
 ##########################################################################
 
 class Button(Widget):
@@ -477,6 +508,7 @@ class Button(Widget):
         super().__init__(style=defaulted(style, display='block'), **kwargs)
         self.click = Trigger()
         self.label = Property(label)
+
     def widget_js(self):
         return minify('''
           element.addEventListener('click', (e) => {
@@ -486,9 +518,11 @@ class Button(Widget):
             element.value = ev.value;
           })
         ''')
+
     def widget_html(self):
         return f'''<input {self.std_attrs()} type="button" value="{
             html.escape(str(self.label))}">'''
+
 
 class Label(Widget):
     def __init__(self, value='', **kwargs):
@@ -505,9 +539,11 @@ class Label(Widget):
                 element.innerText = model.get('value');
             });
         ''')
+
     def widget_html(self):
         return f'''<label {self.std_attrs()}>{
             html.escape(str(self.value))}</label>'''
+
 
 class Textbox(Widget):
     def __init__(self, value='', size=20, style=None, desc=None, **kwargs):
@@ -539,6 +575,7 @@ class Textbox(Widget):
             element.size = model.get('size');
           });
         ''')
+
     def widget_html(self):
 
         html_str = f'''<input {self.std_attrs()} value="{
@@ -546,6 +583,7 @@ class Textbox(Widget):
         if self.desc is not None:
             html_str = f"""<span>{self.desc}</span>{html_str}"""
         return html_str
+
 
 class Range(Widget):
     def __init__(self, value=50, min=0, max=100, **kwargs):
@@ -568,22 +606,26 @@ class Range(Widget):
             }
           })
         ''')
+
     def widget_html(self):
         return f'''<input {self.std_attrs()} type="range" value="{
             self.value}" min="{self.min}" max="{self.max}">'''
+
 
 class Choice(Widget):
     """
     A set of radio button choices.
     """
+
     def __init__(self, choices=None, selection=None, horizontal=False,
-            **kwargs):
+                 **kwargs):
         super().__init__(**kwargs)
         if choices is None:
             choices = []
         self.choices = Property(choices)
         self.horizontal = Property(horizontal)
         self.selection = Property(selection)
+
     def widget_js(self):
         # Note that the 'input' event would enable during-drag feedback,
         # but this is pretty slow on google colab.
@@ -609,25 +651,29 @@ class Choice(Widget):
             model.set('selection', element.choice.value);
           });
         ''')
+
     def widget_html(self):
         radios = [
             f"""<label><input name="choice" type="radio" {
             'checked' if value == self.selection else ''
             } value="{html.escape(value)}">{html.escape(value)}</label>"""
-            for value in self.choices ]
+            for value in self.choices]
         sep = " " if self.horizontal else "<br>"
         return f'<form {self.std_attrs()}>{sep.join(radios)}</form>'
+
 
 class Menu(Widget):
     """
     A dropdown choice.
     """
+
     def __init__(self, choices=None, selection=None, **kwargs):
         super().__init__(**kwargs)
         if choices is None:
             choices = []
         self.choices = Property(choices)
         self.selection = Property(selection)
+
     def widget_js(self):
         return minify('''
           function esc(unsafe) {
@@ -653,28 +699,33 @@ class Menu(Widget):
             model.set('selection', element.menu.value);
           });
         ''')
+
     def widget_html(self):
         options = [
             f"""<option value="{html.escape(str(value))}" {
             'selected' if value == self.selection else ''
             }>{html.escape(str(value))}</option>"""
-            for value in self.choices ]
+            for value in self.choices]
         sep = "\n"
         return f'''<form {self.std_attrs()}"><select name="menu">{
              sep.join(options)}</select></form>'''
+
 
 class Datalist(Widget):
     """
     An input with a dropdown choice.
     """
+
     def __init__(self, choices=None, value=None, **kwargs):
         super().__init__(**kwargs)
         if choices is None:
             choices = []
         self.choices = Property(choices)
         self.value = Property(value)
+
     def datalist_id(self):
         return self.view_id() + '-dl'
+
     def widget_js(self):
         # The mousedown/mouseleave dance defeats the prefix-matching behavior
         # of the built-in datalist by erasing value momentarily on mousedown.
@@ -715,22 +766,25 @@ class Datalist(Widget):
             model.set('value', element.inp.value);
           });
         ''')
+
     def widget_html(self):
         options = [
             f"""<option value="{html.escape(str(value))}">"""
-            for value in self.choices ]
+            for value in self.choices]
         return ''.join([
-          f'<form {self.std_attrs()} onsubmit="return false;">',
-          f'<input name="inp" list="{self.datalist_id()}" autocomplete="off">',
-          f'<datalist id="{self.datalist_id()}">',
-          ''.join(options),
-          f'</datalist></form>'])
+            f'<form {self.std_attrs()} onsubmit="return false;">',
+            f'<input name="inp" list="{self.datalist_id()}" autocomplete="off">',
+            f'<datalist id="{self.datalist_id()}">',
+            ''.join(options),
+            f'</datalist></form>'])
+
 
 class Div(Widget):
     """
     Just an empty DIV element.  Use the innerHTML property to
     change its contents, or use the clear() and print() method.
     """
+
     def __init__(self, innerHTML='', **kwargs):
         super().__init__(**kwargs)
         # TODO: unify more closely with the show() library.
@@ -747,7 +801,7 @@ class Div(Widget):
     def print(self, *args, replace=False):
         """Appends plain text (as a pre) into the div."""
         newHTML = '<pre>%s</pre>' % ' '.join(
-                html.escape(str(text)) for text in args)
+            html.escape(str(text)) for text in args)
         if replace:
             self.innerHTML = newHTML
         else:
@@ -768,8 +822,10 @@ class Div(Widget):
             });
           });
         ''')
+
     def widget_html(self):
         return f'''<div {self.std_attrs()}>{self.innerHTML}</div>'''
+
 
 class ClickDiv(Div):
     '''
@@ -777,8 +833,9 @@ class ClickDiv(Div):
     If a clicked element contains a data-click value, then that value is
     sent as the click event value.
     '''
+
     def __init__(self, innerHTML='', **kwargs):
-        super().__init__(innertHTML, **kwargs)
+        super().__init__(innerHTML, **kwargs)
         self.click = Trigger()
 
     def widget_js(self):
@@ -793,12 +850,14 @@ class ClickDiv(Div):
           });
         ''')
 
+
 class Image(Widget):
     """
     Just a IMG element.  Use the src property to change its contents by url,
     or use the clear() and render(imgdata) methods to convert PIL or
     tensor image data to a url to display.
     """
+
     def __init__(self, src='', style=None, **kwargs):
         super().__init__(style=defaulted(style, margin=0), **kwargs)
         self.src = Property(src)
@@ -825,22 +884,26 @@ class Image(Widget):
         return f'''<img {self.std_attrs()} src="{html.escape(self.src)}">'''
 
 ##########################################################################
-## Utils
+# Utils
 ##########################################################################
+
 
 def minify(t):
     # TODO: plug in some more real minification.
     return re.sub(r'\n\s*', '\n', t)
+
 
 def style_attr(d):
     if not d:
         return ''
     return ' style="%s"' % html.escape(css_style_from_dict(d))
 
+
 def class_attr(d):
     if not d:
         return ''
     return ' class="%s"' % d
+
 
 def data_attrs(d):
     if not d:
@@ -848,12 +911,14 @@ def data_attrs(d):
     return ''.join([
         ' data-%s="%s"' % (k, html.escape(str(v))) for k, v in d.items()])
 
+
 def css_style_from_dict(d):
     # escape punctuation.  (but not #, which is used in colors)
     return ';'.join(
-            re.sub('([A-Z]+)', r'-\1',k).lower() + ':' +
-            re.sub('([][\\!"$%&\'()*+,./:;<=>?@^`{|}~])', r'\\\1', str(v))
+        re.sub('([A-Z]+)', r'-\1', k).lower() + ':' +
+        re.sub('([][\\!"$%&\'()*+,./:;<=>?@^`{|}~])', r'\\\1', str(v))
         for k, v in d.items())
+
 
 def defaulted(d, **kwargs):
     if d is None:
@@ -863,22 +928,25 @@ def defaulted(d, **kwargs):
     return result
 
 ##########################################################################
-## Implementation Details
+# Implementation Details
 ##########################################################################
+
 
 WIDGET_ENV = None
 if WIDGET_ENV is None:
     try:
         from google.colab import output as colab_output
         WIDGET_ENV = 'colab'
-    except:
+    except Exception as e:
+        print(e)
         pass
 if WIDGET_ENV is None:
     try:
         from ipykernel.comm import Comm as jupyter_comm
         COMM_MANAGER = get_ipython().kernel.comm_manager
         WIDGET_ENV = 'jupyter'
-    except:
+    except Exception as e:
+        print(e)
         pass
 
 SEND_RECV_JS = """

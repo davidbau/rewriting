@@ -1,6 +1,9 @@
-import torch, numpy, itertools
+import torch
+import numpy
+import itertools
 import torch.nn as nn
 from collections import OrderedDict
+
 
 def load_pretrained(domain):
     # Automatically download and cache progressive GAN model
@@ -20,11 +23,12 @@ def load_pretrained(domain):
     # Posted here.
     url = 'http://gandissect.csail.mit.edu/models/' + weights_filename
     try:
-        sd = torch.hub.load_state_dict_from_url(url) # pytorch 1.1
+        sd = torch.hub.load_state_dict_from_url(url)  # pytorch 1.1
     except:
-        sd = torch.hub.model_zoo.load_url(url) # pytorch 1.0
+        sd = torch.hub.model_zoo.load_url(url)  # pytorch 1.0
     model = from_state_dict(sd)
     return model
+
 
 def print_network(net, verbose=False):
     num_params = 0
@@ -41,6 +45,7 @@ def from_pth_file(filename):
     '''
     return from_state_dict(torch.load(filename))
 
+
 def from_state_dict(state_dict):
     if 'state_dict' in state_dict:
         state_dict = state_dict['state_dict']
@@ -56,9 +61,10 @@ def from_state_dict(state_dict):
 # Modules
 ###############################################################################
 
+
 class ProgressiveGenerator(nn.Sequential):
     def __init__(self, resolution=None, sizes=None, modify_sequence=None,
-            output_tanh=True):
+                 output_tanh=True):
         '''
         A pytorch progessive GAN generator that can be converted directly
         from either a tensorflow model or a theano model.  It consists of
@@ -85,17 +91,18 @@ class ProgressiveGenerator(nn.Sequential):
         assert (resolution is None) != (sizes is None)
         if sizes is None:
             sizes = {
-                    8: [512, 512, 512],
-                    16: [512, 512, 512, 512],
-                    32: [512, 512, 512, 512, 256],
-                    64: [512, 512, 512, 512, 256, 128],
-                    128: [512, 512, 512, 512, 256, 128, 64],
-                    256: [512, 512, 512, 512, 256, 128, 64, 32],
-                    1024: [512, 512, 512, 512, 512, 256, 128, 64, 32, 16]
-                }[resolution]
+                8: [512, 512, 512],
+                16: [512, 512, 512, 512],
+                32: [512, 512, 512, 512, 256],
+                64: [512, 512, 512, 512, 256, 128],
+                128: [512, 512, 512, 512, 256, 128, 64],
+                256: [512, 512, 512, 512, 256, 128, 64, 32],
+                1024: [512, 512, 512, 512, 512, 256, 128, 64, 32, 16]
+            }[resolution]
         # Follow the schedule of upsampling given by sizes.
         # layers are called: layer1, layer2, etc; then output_128x128
         sequence = []
+
         def add_d(layer, name=None):
             if name is None:
                 name = 'layer%d' % (len(sequence) + 1)
@@ -110,7 +117,7 @@ class ProgressiveGenerator(nn.Sequential):
         # just include the last (highest resolution) one.
         dim = 4 * (2 ** (len(sequence) // 2 - 1))
         add_d(OutputConvBlock(sizes[-1], tanh=output_tanh),
-                name='output_%dx%d' % (dim, dim))
+              name='output_%dx%d' % (dim, dim))
         # Allow the sequence to be modified
         if modify_sequence is not None:
             sequence = modify_sequence(sequence)
@@ -121,6 +128,7 @@ class ProgressiveGenerator(nn.Sequential):
         x = x.view(x.shape[0], x.shape[1], 1, 1)
         return super().forward(x)
 
+
 class PixelNormLayer(nn.Module):
     def __init__(self):
         super(PixelNormLayer, self).__init__()
@@ -128,15 +136,17 @@ class PixelNormLayer(nn.Module):
     def forward(self, x):
         return x / torch.sqrt(torch.mean(x**2, dim=1, keepdim=True) + 1e-8)
 
+
 class DoubleResolutionLayer(nn.Module):
     def forward(self, x):
         x = nn.functional.interpolate(x, scale_factor=2, mode='nearest')
         return x
 
+
 class WScaleLayer(nn.Module):
     def __init__(self, size, fan_in, gain=numpy.sqrt(2)):
         super(WScaleLayer, self).__init__()
-        self.scale = gain / numpy.sqrt(fan_in) # No longer a parameter
+        self.scale = gain / numpy.sqrt(fan_in)  # No longer a parameter
         self.b = nn.Parameter(torch.randn(size))
         self.size = size
 
@@ -146,16 +156,18 @@ class WScaleLayer(nn.Module):
             x_size[0], self.size, x_size[2], x_size[3])
         return x
 
+
 class NormConvBlock(nn.Sequential):
     def __init__(self, in_channels, out_channels, kernel_size, padding):
         super().__init__(OrderedDict([
             ('norm', PixelNormLayer()),
             ('conv', nn.Conv2d(
-              in_channels, out_channels, kernel_size, 1, padding, bias=False)),
+                in_channels, out_channels, kernel_size, 1, padding, bias=False)),
             ('wscale', WScaleLayer(out_channels, in_channels,
-              gain=numpy.sqrt(2) / kernel_size)),
+                                   gain=numpy.sqrt(2) / kernel_size)),
             ('relu', nn.LeakyReLU(inplace=True, negative_slope=0.2))
         ]))
+
 
 class NormUpscaleConvBlock(nn.Sequential):
     def __init__(self, in_channels, out_channels, kernel_size, padding):
@@ -163,18 +175,19 @@ class NormUpscaleConvBlock(nn.Sequential):
             ('norm', PixelNormLayer()),
             ('up', DoubleResolutionLayer()),
             ('conv', nn.Conv2d(in_channels, out_channels, kernel_size,
-                1, padding, bias=False)),
+                               1, padding, bias=False)),
             ('wscale', WScaleLayer(out_channels, in_channels,
-                gain=numpy.sqrt(2) / kernel_size)),
+                                   gain=numpy.sqrt(2) / kernel_size)),
             ('relu', nn.LeakyReLU(inplace=True, negative_slope=0.2))
         ]))
+
 
 class OutputConvBlock(nn.Sequential):
     def __init__(self, in_channels, tanh=False):
         super().__init__(OrderedDict([
             ('norm', PixelNormLayer()),
             ('conv', nn.Conv2d(
-                    in_channels, 3, kernel_size=1, padding=0, bias=False)),
+                in_channels, 3, kernel_size=1, padding=0, bias=False)),
             ('wscale', WScaleLayer(3, in_channels, gain=1)),
             ('clamp', nn.Hardtanh() if tanh else (lambda x: x))
         ]))
@@ -182,6 +195,7 @@ class OutputConvBlock(nn.Sequential):
 ###############################################################################
 # Conversion
 ###############################################################################
+
 
 def from_tf_parameters(parameters):
     '''
@@ -193,6 +207,7 @@ def from_tf_parameters(parameters):
     result.load_state_dict(state_dict)
     return result
 
+
 def from_old_pt_dict(parameters):
     '''
     Instantiate from old pytorch state dict.
@@ -202,6 +217,7 @@ def from_old_pt_dict(parameters):
     result = ProgressiveGenerator(sizes=sizes)
     result.load_state_dict(state_dict)
     return result
+
 
 def sizes_from_state_dict(params):
     '''
@@ -222,6 +238,7 @@ def sizes_from_state_dict(params):
             sizes.append(weight.shape[0])
     return sizes
 
+
 def state_dict_from_tf_parameters(parameters):
     '''
     Conversion from tensorflow parameters
@@ -239,8 +256,8 @@ def state_dict_from_tf_parameters(parameters):
         # 32x32/Conv0_up/weight -> layer7.conv.weight
         # 32x32/Conv1/weight -> layer8.conv.weight
         tf_layername = '%dx%d/%s' % (resolution, resolution,
-                'Dense' if i == 0 else 'Conv' if i == 1 else
-                'Conv0_up' if i % 2 == 0 else 'Conv1')
+                                     'Dense' if i == 0 else 'Conv' if i == 1 else
+                                     'Conv0_up' if i % 2 == 0 else 'Conv1')
         pt_layername = 'layer%d' % (i + 1)
         # Stop looping when we run out of parameters.
         try:
@@ -251,7 +268,7 @@ def state_dict_from_tf_parameters(parameters):
         if i == 0:
             # Convert dense layer to 4x4 convolution
             weight = weight.view(weight.shape[0], weight.shape[1] // 16,
-                   4, 4).permute(1, 0, 2, 3).flip(2, 3)
+                                 4, 4).permute(1, 0, 2, 3).flip(2, 3)
             sizes.append(weight.shape[0])
         elif i % 2 == 0:
             # Convert inverse convolution to convolution
@@ -271,11 +288,12 @@ def state_dict_from_tf_parameters(parameters):
     tf_layername = 'ToRGB_lod0'
     pt_layername = 'output_%dx%d' % (resolution, resolution)
     result['%s.conv.weight' % pt_layername] = torch_from_tf(
-            params['%s/weight' % tf_layername]).permute(3, 2, 0, 1)
+        params['%s/weight' % tf_layername]).permute(3, 2, 0, 1)
     result['%s.wscale.b' % pt_layername] = torch_from_tf(
-            params['%s/bias' % tf_layername])
+        params['%s/bias' % tf_layername])
     # Return parameters
     return result
+
 
 def state_dict_from_old_pt_dict(params):
     '''
@@ -296,7 +314,7 @@ def state_dict_from_old_pt_dict(params):
             sizes.append(weight.shape[1])
         result['%s.conv.weight' % (pt_layername)] = weight
         result['%s.wscale.b' % (pt_layername)] = params[
-                '%s.wscale.b' % (old_layername)]
+            '%s.wscale.b' % (old_layername)]
     # Copy the output layers.
     i -= 1
     resolution = 4 * (2 ** (i // 2))
@@ -305,4 +323,3 @@ def state_dict_from_old_pt_dict(params):
     result['%s.wscale.b' % pt_layername] = params['output.wscale.b']
     # Return parameters and also network architecture sizes.
     return result
-

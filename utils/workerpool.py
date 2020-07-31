@@ -32,12 +32,14 @@ import signal
 import atexit
 import sys
 
+
 class WorkerBase(Process):
     '''
     Subclass this class and override its work() method (and optionally,
     setup() as well) to define the units of work to be done in a process
     worker in a woker pool.
     '''
+
     def __init__(self, i, process_count, queue, initargs):
         if process_count > 0:
             # Make sure we ignore ctrl-C if we are not on main process.
@@ -47,6 +49,7 @@ class WorkerBase(Process):
         self.queue = queue
         super(WorkerBase, self).__init__()
         self.setup(**initargs)
+
     def run(self):
         # Do the work until None is dequeued
         while True:
@@ -56,21 +59,24 @@ class WorkerBase(Process):
                 print('Exiting...')
                 break
             if work_batch is None:
-                self.queue.put(None) # for another worker
+                self.queue.put(None)  # for another worker
                 return
             self.work(*work_batch)
+
     def setup(self, **initargs):
         '''
         Override this method for any per-process initialization.
         Keywoard args are passed from WorkerPool constructor.
         '''
         pass
+
     def work(self, *args):
         '''
         Override this method for one-time initialization.
         Args are passed from WorkerPool.add() arguments.
         '''
         raise NotImplementedError('worker subclass needed')
+
 
 class WorkerPool(object):
     '''
@@ -79,6 +85,7 @@ class WorkerPool(object):
     pool.add(*args) to queue args to distribute to worker.work(*args),
     and call pool.join() to wait for all the workers to complete.
     '''
+
     def __init__(self, worker=WorkerBase, process_count=None, **initargs):
         global active_pools
         if process_count is None:
@@ -96,11 +103,12 @@ class WorkerPool(object):
         self.queue = Queue(maxsize=(process_count * 3))
         self.processes = None   # Initialize before trying to construct workers
         self.processes = [worker(i, process_count, self.queue, initargs)
-                for i in range(process_count)]
+                          for i in range(process_count)]
         for p in self.processes:
             p.start()
         # The main process should handle ctrl-C.  Restore this now.
         signal.signal(signal.SIGINT, original_sigint_handler)
+
     def add(self, *work_batch):
         if self.queue is None:
             if hasattr(self, 'worker'):
@@ -114,6 +122,7 @@ class WorkerPool(object):
             except (KeyboardInterrupt, SystemExit):
                 # Handle ctrl-C if done while waiting for the queue.
                 self.early_terminate()
+
     def join(self):
         # End the queue, and wait for all worker processes to complete nicely.
         if self.queue is not None:
@@ -126,6 +135,7 @@ class WorkerPool(object):
             del active_pools[id(self)]
         except:
             pass
+
     def early_terminate(self):
         # When shutting down unexpectedly, first end the queue.
         if self.queue is not None:
@@ -143,16 +153,20 @@ class WorkerPool(object):
             del active_pools[id(self)]
         except:
             pass
+
     def __del__(self):
         if self.queue is not None:
             print('ERROR: workerpool.join() not called!', file=sys.stderr)
             self.join()
 
+
 # Error and ctrl-C handling: kill worker processes if the main process ends.
 active_pools = {}
+
+
 def early_terminate_pools():
     for _, pool in list(active_pools.items()):
         pool.early_terminate()
 
-atexit.register(early_terminate_pools)
 
+atexit.register(early_terminate_pools)

@@ -1,35 +1,36 @@
 from .labwidget import Widget, Property, minify
-import html
+
 
 class PaintWidget(Widget):
-  def __init__(self,
-          width=256, height=256,
-          image='', mask='', brushsize=10.0, oneshot=False, disabled=False,
-          vanishing=True, opacity=0.7,
-          **kwargs):
-    super().__init__(**kwargs)
-    self.mask = Property(mask)
-    self.image = Property(image)
-    self.vanishing = Property(vanishing)
-    self.brushsize = Property(brushsize)
-    self.erase = Property(False)
-    self.oneshot = Property(oneshot)
-    self.disabled = Property(disabled)
-    self.width = Property(width)
-    self.height = Property(height)
-    self.opacity = Property(opacity)
-    self.startpos = Property(None)
-    self.dragpos = Property(None)
-    self.dragging = Property(False)
+    def __init__(self,
+                 width=256, height=256,
+                 image='', mask='', brushsize=10.0, oneshot=False, disabled=False,
+                 vanishing=True, opacity=0.7,
+                 **kwargs):
+        super().__init__(**kwargs)
+        self.mask = Property(mask)
+        self.image = Property(image)
+        self.vanishing = Property(vanishing)
+        self.brushsize = Property(brushsize)
+        self.erase = Property(False)
+        self.oneshot = Property(oneshot)
+        self.disabled = Property(disabled)
+        self.width = Property(width)
+        self.height = Property(height)
+        self.opacity = Property(opacity)
+        self.startpos = Property(None)
+        self.dragpos = Property(None)
+        self.dragging = Property(False)
 
-  def widget_js(self):
-    return minify(f'''
+    def widget_js(self):
+        return minify(f'''
       {PAINT_WIDGET_JS}
       var pw = new PaintWidget(element, model);
     ''')
-  def widget_html(self):
-    v = self.view_id()
-    return minify(f'''
+
+    def widget_html(self):
+        v = self.view_id()
+        return minify(f'''
     <style>
     #{v} {{ position: relative; display: inline-block; }}
     #{v} .paintmask {{
@@ -41,6 +42,7 @@ class PaintWidget(Widget):
     </style>
     <div id="{v}"></div>
     ''')
+
 
 PAINT_WIDGET_JS = """
 class PaintWidget {

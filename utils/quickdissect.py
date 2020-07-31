@@ -1,6 +1,11 @@
-import argparse, os, json, numpy, PIL.Image
+import argparse
+import os
+import json
+import numpy
+import PIL.Image
 from . import pidfile, tally, nethook, zdataset
 from . import upsample, imgviz, imgsave, proggan, segmenter
+
 
 def main():
     parser = argparse.ArgumentParser(description='quickdissect')
@@ -18,7 +23,7 @@ def main():
     torch.backends.cudnn.profile = True
 
     model = nethook.InstrumentedModel(
-            proggan.load_pretrained(args.model)).cuda()
+        proggan.load_pretrained(args.model)).cuda()
     model.retain_layer(args.layer)
 
     zds = zdataset.z_dataset_for_model(model, size=args.sample_size, seed=1)
@@ -33,7 +38,7 @@ def main():
         return acts.permute(0, 2, 3, 1).contiguous().view(-1, acts.shape[1])
 
     rq = tally.tally_quantile(flat_acts, zds, cachefile=resfn('rq.npz'))
-    level_at_cutoff = rq.quantiles(0.99)[None,:,None,None].cuda()
+    level_at_cutoff = rq.quantiles(0.99)[None, :, None, None].cuda()
 
     segmodel, seglabels = segmenter.load_segmenter(args.seg)
 
@@ -45,14 +50,14 @@ def main():
         return tally.conditional_samples(iacts, seg)
 
     cmv = tally.tally_conditional_quantile(compute_cond_indicator, zds,
-            cachefile=resfn('cmv.npz'), pin_memory=True)
+                                           cachefile=resfn('cmv.npz'), pin_memory=True)
 
     iou_table = tally.iou_from_conditional_indicator_mean(cmv).permute(1, 0)
     numpy.save(resfn('iou.npy'), iou_table.numpy())
 
     unit_list = enumerate(zip(*iou_table.max(1)))
     unit_records = {
-        'units': [ {
+        'units': [{
             'unit': unit,
             'iou': iou.item(),
             'label': seglabels[segc],
@@ -69,7 +74,7 @@ def main():
         return model.retained_layer(args.layer).max(3)[0].max(2)[0]
 
     topk = tally.tally_topk(compute_image_max, zds,
-            cachefile=resfn('topk.npz'))
+                            cachefile=resfn('topk.npz'))
 
     def compute_acts(zbatch):
         image_batch = model(zbatch.cuda())
@@ -82,15 +87,18 @@ def main():
 
     pidfile.mark_job_done(resfn.dir)
 
+
 if __name__ == '__main__':
     main()
+
 
 class DissectVis:
     '''
     Code to read out the dissection computed in the program above.
     '''
+
     def __init__(self, outdir='results', model='church', layers=None,
-            seg='netpqc', sample_size=1000):
+                 seg='netpqc', sample_size=1000):
         if not layers:
             layers = ['layer%d' % i for i in range(1, 15)]
 
@@ -112,14 +120,17 @@ class DissectVis:
         self.images = images
         self.basedir = os.path.join(outdir, model)
         self.setting = os.path.join(seg, str(sample_size))
-        
+
     def label(self, layer, unit):
         return self.labels[layer][unit]['label']
+
     def iou(self, layer, unit):
         return self.labels[layer][unit]['iou']
+
     def top_units(self, layer, seglabel, k=20):
-        return self.ioutable[layer][:,self.seglabels.index(seglabel)
-                ].argsort()[::-1][:k].tolist()
+        return self.ioutable[layer][:, self.seglabels.index(seglabel)
+                                    ].argsort()[::-1][:k].tolist()
+
     def image(self, layer, unit):
         result = self.images[layer][unit]
         # Lazy loading of images.

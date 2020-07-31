@@ -1,15 +1,23 @@
-import numpy, torch, PIL, io, base64, re
+import numpy
+import torch
+import PIL
+import io
+import base64
+import re
 from torchvision import transforms
+
 
 def as_tensor(data, source='zc', target='zc'):
     renorm = renormalizer(source=source, target=target)
     return renorm(data)
 
+
 def as_image(data, source='zc', target='byte'):
     assert len(data.shape) == 3
     renorm = renormalizer(source=source, target=target)
     return PIL.Image.fromarray(renorm(data).
-            permute(1,2,0).cpu().numpy())
+                               permute(1, 2, 0).cpu().numpy())
+
 
 def as_url(data, source='zc', size=None):
     if isinstance(data, PIL.Image.Image):
@@ -23,6 +31,7 @@ def as_url(data, source='zc', size=None):
     b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
     return 'data:image/png;base64,%s' % (b64)
 
+
 def from_image(im, target='zc', size=None):
     if im.format != 'RGB':
         im = im.convert('RGB')
@@ -32,12 +41,14 @@ def from_image(im, target='zc', size=None):
     renorm = renormalizer(source='pt', target=target)
     return renorm(pt)
 
+
 def from_url(url, target='zc', size=None):
     image_data = re.sub('^data:image/.+;base64,', '', url)
     im = PIL.Image.open(io.BytesIO(base64.b64decode(image_data)))
     if target == 'image' and size is None:
         return im
     return from_image(im, target, size=size)
+
 
 def renormalizer(source='zc', target='zc'):
     '''
@@ -61,25 +72,27 @@ def renormalizer(source='zc', target='zc'):
     else:
         normalizer = find_normalizer(source)
         oldoffset, oldscale = (
-                (normalizer.mean, normalizer.std) if normalizer is not None
-                else OFFSET_SCALE['pt'])
+            (normalizer.mean, normalizer.std) if normalizer is not None
+            else OFFSET_SCALE['pt'])
     newoffset, newscale = (target if isinstance(target, tuple)
-            else OFFSET_SCALE[target])
+                           else OFFSET_SCALE[target])
     return Renormalizer(oldoffset, oldscale, newoffset, newscale,
-            tobyte=(target == 'byte'))
+                        tobyte=(target == 'byte'))
+
 
 # The three commonly-seen image normalization schemes.
-OFFSET_SCALE=dict(
-            pt=([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
-            zc=([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-            imagenet=([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            imagenet_meanonly=([0.485, 0.456, 0.406],
-                [1.0/255, 1.0/255, 1.0/255]),
-            places_meanonly=([0.475, 0.441, 0.408],
-                [1.0/255, 1.0/255, 1.0/255]),
-            byte=([0.0, 0.0, 0.0], [1.0/255, 1.0/255, 1.0/255]))
+OFFSET_SCALE = dict(
+    pt=([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+    zc=([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+    imagenet=([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    imagenet_meanonly=([0.485, 0.456, 0.406],
+                       [1.0 / 255, 1.0 / 255, 1.0 / 255]),
+    places_meanonly=([0.475, 0.441, 0.408],
+                     [1.0 / 255, 1.0 / 255, 1.0 / 255]),
+    byte=([0.0, 0.0, 0.0], [1.0 / 255, 1.0 / 255, 1.0 / 255]))
 
-NORMALIZER={k: transforms.Normalize(*OFFSET_SCALE[k]) for k in OFFSET_SCALE}
+NORMALIZER = {k: transforms.Normalize(*OFFSET_SCALE[k]) for k in OFFSET_SCALE}
+
 
 def find_normalizer(source=None):
     '''
@@ -101,13 +114,14 @@ def find_normalizer(source=None):
                 return result
     return None
 
+
 class Renormalizer:
     def __init__(self, oldoffset, oldscale, newoffset, newscale, tobyte=False):
         self.mul = torch.from_numpy(
-                numpy.array(oldscale) / numpy.array(newscale))
+            numpy.array(oldscale) / numpy.array(newscale))
         self.add = torch.from_numpy(
-                (numpy.array(oldoffset) - numpy.array(newoffset))
-                / numpy.array(newscale))
+            (numpy.array(oldoffset) - numpy.array(newoffset))
+            / numpy.array(newscale))
         self.tobyte = tobyte
         # Store these away to allow the data to be renormalized again
         self.mean = newoffset

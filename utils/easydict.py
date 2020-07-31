@@ -2,6 +2,7 @@
 From https://github.com/makinacorpus/easydict.
 '''
 
+
 class EasyDict(dict):
     """
     Get attributes
@@ -93,6 +94,7 @@ class EasyDict(dict):
     >>> sorted(f.keys())
     ['height', 'power']
     """
+
     def __init__(self, d=None, **kwargs):
         if d is None:
             d = {}
@@ -116,10 +118,12 @@ class EasyDict(dict):
 
     __setitem__ = __setattr__
 
+
 def load_json(filename):
     import json
     with open(filename) as f:
         return EasyDict(json.load(f))
+
 
 if __name__ == "__main__":
     import doctest
