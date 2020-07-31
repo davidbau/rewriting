@@ -3,8 +3,7 @@
 In this paper we ask if a state-of-the-art deep network can be reprogrammed to follow different rules, by enabling a user to directly change the weights, instead of training with a data set.
 
 <table><tr><td><a href="http://rewriting.csail.mit.edu/"><img src='images/horse-hat-edit.gif'></a><br>
-Directly rewriting the weights of a StyleGANv2<br>
-to reprogram horses to have hats.</td></tr></table>
+Directly rewriting the weights of a StyleGANv2 to reprogram horses to have hats.</td></tr></table>
 
 [**Rewriting a Deep Generative Model**](https://rewriting.csail.mit.edu/).<br>
 David Bau, Steven Liu, Tongzhou Wang, Jun-Yan Zhu, Antonio Torralba, ECCV 2020 (oral).
