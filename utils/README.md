@@ -1,17 +1,21 @@
-## Sampling methods (used for computing baselines)
+## Dissection utilities.
 
-`sample.py` is used to sample 50k images (either clean or generated) without edits. Outputs images in form `{img_type}_{imgnum}`, where imgnum is the number passed into `zdataset.z_sample_for_model` as a seed. 
+David's collection of utilities for performing dissection and
+surgery on deep networks in pytorch.
 
+ - nethook simplifies splitting, instrumenting, and modifying
+   the behavior of individual steps within a torch.nn.Module.
+ - tally and runningstats use the GPU to efficiently compute
+   running statistics such as quantile estimations, covariance,
+   topk, and counts.
+ - labwidget and paintwidget is a small no-dependency UI
+   framework for allowing interactive prototyping within a
+   notebook, that is compatible both Jupyter and Google Colab.
+ - workerpool is a multithreaded utility to facilitate fast
+   post-processing and writing of data.
+ - segmenter provides a semantic segmenter used for identifying
+   semantic concept signals within networks.
+ - proggan and stylegan2 are ports of generative networks
+   that are compatible with pretrained weights, but that are
+   structured for simpler surgery and modification.
 
-`sample_church.py` is used to get edited images given the original generated images and their imgnums.  Again outputs images form `{img_type}_{imgnum}`, where imgnum is the number passed into `zdataset.z_sample_for_model` as a seed. 
-
-
-`segmented_samples` generated images which have some percentage of desired pixels from a segmentation class. For example, you can use this to sample churches with domes. Again outputs images form `{img_type}_{imgnum}`, where imgnum is the number passed into `zdataset.z_sample_for_model` as a seed. 
-
-## FID tools, used for supplementary patch graphs and can be used for baseline experiments (though I think Tongzhou probably used a different script)
-
-`get_fid.py` is the main script to precompute several statistics of both cropped images/samples and whole images/samples. It uses `get_samples.py` to get the appropriate samples. The main functions used to obtain cropped statistics are `get_cropped_dataset_statistics` and `get_cropped_fake_statistics`. The main function used to obtain whole image statistics is `get_dataset_statistics`.
-
-## Patch visualization tools 
-
-`visualize_crops.py` lets you visualize the rendering of cropped activations. It is used to produce the patch figures in the supplement. 
