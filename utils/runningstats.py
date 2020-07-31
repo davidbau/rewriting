@@ -1,8 +1,25 @@
 '''
-Running statistics on the GPU using pytorch.
+Running statistics on the GPU using pytorch, by David Bau.
 
 RunningTopK maintains top-k statistics for a set of channels in parallel.
 RunningQuantile maintains (sampled) quantile statistics for a set of channels.
+RunningVariance calculate running mean and variance statistics stably.
+RunningCovariance and RunningCrossCovariance accumulate covariance statistics.
+RunningSecondMoment adds up 2nd moment (covariance without subtracting mean).
+RunningBincount does a running sparse count.
+RunningAllIntersectionAndUnion count up intersection and unions.
+RunningConditional[stats] keeps many running stats, each conditioned on a key.
+
+Batchwise tally functions, analogous to tensor.topk, mean+variance,
+bincount, covaraince, and sort (for quantiles), implemented in a way
+that permits fast computation of statistics over large data sets that
+do not fit in memory at once.
+
+These functions are useful because, while many statistics are much
+cheaper to compute on the GPU than on the CPU, they may require too
+much memory to compute all at once.  Instead the statistics need
+to be computed in a running fashion, one batch at a time, and
+accumulated in a way that economizes GPU memory.
 '''
 
 import torch
