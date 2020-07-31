@@ -4,6 +4,10 @@ a multiprocess pool of workers that aren't done by multiprocessing.Pool,
 including setup with per-process state, debugging by putting the worker
 on the main thread, and correct handling of unexpected errors, and ctrl-C.
 
+While the pytorch DataLoader is helpful for fast reading of data in
+parallel, a utility is needed for fast writing of data.  This worker
+class simpliifies this problem - by David Bau.
+
 To use it,
 1. Put the per-process setup and the per-task work in the
    setup() and work() methods of your own WorkerBase subclass.
