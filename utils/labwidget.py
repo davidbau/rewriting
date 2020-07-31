@@ -938,7 +938,6 @@ if WIDGET_ENV is None:
         from google.colab import output as colab_output
         WIDGET_ENV = 'colab'
     except Exception as e:
-        print(e)
         pass
 if WIDGET_ENV is None:
     try:
@@ -946,8 +945,9 @@ if WIDGET_ENV is None:
         COMM_MANAGER = get_ipython().kernel.comm_manager
         WIDGET_ENV = 'jupyter'
     except Exception as e:
-        print(e)
         pass
+if WIDGET_ENV is None:
+    print('Neither colab nor jupyter environment found.')
 
 SEND_RECV_JS = """
 function recvFromPython(obj_id, fn) {
