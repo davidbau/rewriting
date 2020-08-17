@@ -41,10 +41,43 @@ Our method is based on the hypothesis that the weights of a generator act as lin
 
 ## Example Results
 
+The results below show changes of a single rule within StyleGANv2.  In each case,
+four examples chosen by the user (center of the top row) establish the context
+for the rule begin rewritten, and the "copy and paste" examples (left and right of
+top row) indicate how the user wishes to change the model.
+
+The grid below shows pairs of outputs: for each pair, the first is the output of
+the original unmodified StyleGANv2.  The second is the output of the modified
+StyleGANv2, applying the user's intention using our method.
+
+<hr>
+
+First: changing the rule defining kids' eyebrows to make them look like a bushy mustache.
+
 <img src="images/example-eyebrows.png" width=800>
+
+<hr>
+
+Altering the rule for pointy tower tops to make them into trees.
+
 <img src="images/example-tree-towers.png" width=800>
+
+<hr>
+
+Changing the rule for tops of horses heads, to put hats on horses.
+
 <img src="images/example-horsehats.png" width=800>
+
+<hr>
+
+Changing frowns into smiles.
+
 <img src="images/example-smiles.png" width=800>
+
+<hr>
+
+Removing the main window in a building by changing the rule to draw a blank wall.
+
 <img src="images/example-erasewindows.png" width=800>
 
 ## Tips
