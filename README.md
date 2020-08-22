@@ -110,11 +110,14 @@ To edit your own models, do the following:
 # Resolution (size) and style dimensionality (style_dim and n_mlp) are
 # the architecture dimensions as you trained them.  The truncation trick can be
 # applied here if desired (truncation=1.0 if not).
-model = SeqStyleGAN2(size=256, style_dim=512, n_mlp=8, truncation=0.5, **kwargs)
+# Note that mconv='seq' splits apart the optimized modulated convolution into
+# separate operations that the rewriter can examine the underlying
+# convolution directly.
+model = SeqStyleGAN2(size=256, style_dim=512, n_mlp=8, truncation=0.5, mconv='seq')
 
 # load the exponential moving average model weights
 state_dict = torch.load('your_model.pt')
-model.load_state_dict(state_dict['g_ema'])
+model.load_state_dict(state_dict['g_ema'], latent_avg=state_dict['latent_avg'])
 ```
  * Create a `ganrewrite.SeqStyleGanRewriter` instance to edit your model
 ```
