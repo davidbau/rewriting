@@ -25,7 +25,7 @@ from . import op
 from collections import OrderedDict
 from torch import nn
 from torch.nn import functional as F
-import math, torch
+import math, torch, warnings
 import numpy as np
 
 class SeqStyleGAN2(nn.Sequential):
@@ -146,13 +146,16 @@ class SeqStyleGAN2(nn.Sequential):
     def output_from_bag(self, bag):
         return ReturnOuptput()(bag)
 
-    def load_state_dict(self, data):
+    def load_state_dict(self, data, latent_avg=None, **kwargs):
         try:
-            super().load_state_dict(data)
+            super().load_state_dict(data, **kwargs)
             return
         except:
             pass
         # If the state dict does not match, try converting other versions
+        if len(data) < 10 and 'g_ema' in data and 'latent_avg' in data:
+            latent_avg = data['latent_avg']
+            data = data['g_ema']
         import re
         newdata = {}
         for k, v in data.items():
@@ -185,7 +188,18 @@ class SeqStyleGAN2(nn.Sequential):
             else:
                 k = re.sub(r'mconv\.dconv\.weight$', 'mconv.weight', k)
             newdata[k] = v
-        super().load_state_dict(newdata)
+        # optional fields just leave current state dict unchanged
+        cur_state = self.state_dict()
+        if latent_avg is not None:
+            newdata['latents.latent_avg'] = latent_avg
+        elif 'latents.latent_avg' not in newdata:
+            if self.latents.truncation != 1.0:
+                warnings.warn('Need to provide latent_avg to use truncation.')
+            newdata['latents.latent_avg'] = cur_state['latents.latent_avg']
+        for key in [k for k in cur_state.keys() if k.startswith('noises')]:
+            if key not in newdata:
+                newdata[key] = cur_state[key]
+        super().load_state_dict(newdata, **kwargs)
 
 class DataBag(dict):
     '''
@@ -548,7 +562,7 @@ class BagLatent(nn.Module):
         self.truncation = truncation
         self.latent_avg = None
     def forward(self, latent):
-        if self.truncation != 1.0:
+        if self.truncation != 1.0 and self.latent_avg is not None:
             latent = self.latent_avg + (
                     self.truncation * (latent - self.latent_avg))
         return DataBag(latent=latent.unsqueeze(1).repeat(1, self.n_latent, 1))
@@ -558,9 +572,9 @@ class AdjustLatent(nn.Module):
         super().__init__()
         self.n_latent = n_latent
         self.truncation = truncation
-        self.latent_avg = None
+        self.register_buffer('latent_avg', torch.tensor(0.0))
     def forward(self, d):
-        if self.truncation != 1.0:
+        if self.truncation != 1.0 and self.latent_avg.ndim > 0:
             latent = self.latent_avg + (
                     self.truncation * (d.latent - self.latent_avg))
         else:
