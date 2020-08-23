@@ -115,9 +115,10 @@ To edit your own models, do the following:
 # convolution directly.
 model = SeqStyleGAN2(size=256, style_dim=512, n_mlp=8, truncation=0.5, mconv='seq')
 
-# load the exponential moving average model weights
+# load the exponential moving average model weights, put it on the GPU.
 state_dict = torch.load('your_model.pt')
 model.load_state_dict(state_dict['g_ema'], latent_avg=state_dict['latent_avg'])
+model.cuda()
 ```
  * Create a `ganrewrite.SeqStyleGanRewriter` instance to edit your model
 ```
