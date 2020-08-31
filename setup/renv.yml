@@ -1,4 +1,4 @@
-name: denv
+name: renv
 channels:
   - pytorch
   - ostrokach-forge

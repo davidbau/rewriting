@@ -15,9 +15,7 @@ cd "$(dirname "$(dirname "$(readlink -f "$0")")")"
 
 # Default RECIPE 'renv' can be overridden by 'RECIPE=foo setup.sh'
 RECIPE=${RECIPE:-renv}
-# Default ENV_NAME 'renv' can be overridden by 'ENV_NAME=foo setup.sh'
-ENV_NAME="${ENV_NAME:-${RECIPE}}"
-echo "Creating conda environment ${ENV_NAME}"
+echo "Creating conda environment ${RECIPE}"
 
 if [[ ! $(type -P conda) ]]
 then
@@ -35,15 +33,15 @@ fi
 
 # Uninstall existing environment
 source deactivate
-rm -rf ~/.conda/envs/${ENV_NAME}
+rm -rf ~/.conda/envs/${RECIPE}
 
 # Build new environment based on the recipe.
-conda env create --name=${ENV_NAME} -f setup/${RECIPE}.yml
+conda env create setup/${RECIPE}.yml
 
 # Set up CUDA_HOME to set itself up correctly on every source activate
 # https://stackoverflow.com/questions/31598963
-mkdir -p ~/.conda/envs/${ENV_NAME}/etc/conda/activate.d
+mkdir -p ~/.conda/envs/${RECIPE}/etc/conda/activate.d
 echo "export CUDA_HOME=/usr/local/cuda-10.1" \
-    > ~/.conda/envs/${ENV_NAME}/etc/conda/activate.d/CUDA_HOME.sh
+    > ~/.conda/envs/${RECIPE}/etc/conda/activate.d/CUDA_HOME.sh
 
-source activate ${ENV_NAME}
+source activate ${RECIPE}
