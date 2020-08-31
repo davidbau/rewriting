@@ -36,7 +36,7 @@ def load_seq_stylegan(category, truncation=1.0, **kwargs):  # mconv='seq'):
     state_dict = load_state_dict(category)
     size = sizes[category]
     g = SeqStyleGAN2(size, style_dim=512, n_mlp=8, truncation=truncation, **kwargs)
-    g.load_state_dict(state_dict['g_ema'])
+    g.load_state_dict(state_dict['g_ema'],
+            latent_avg=state_dict['latent_avg'])
     g.cuda()
-    g.latents.latent_avg = state_dict['latent_avg'].cuda()
     return g
