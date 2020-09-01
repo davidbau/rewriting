@@ -5,9 +5,8 @@ channels:
   - conda-forge
 dependencies:
   - python=3.6
-  - cudatoolkit=10.1
-  - cudnn=7.6.0
-  - pytorch=1.5
+  - cudatoolkit=10.2
+  - pytorch=1.5.1
   - torchvision
   - mkl-include
   - numpy
