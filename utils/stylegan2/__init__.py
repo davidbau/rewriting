@@ -34,7 +34,7 @@ def load_state_dict(category):
         sd = torch.hub.load_state_dict_from_url(url)  # pytorch 1.1
     except:
         sd = torch.hub.model_zoo.load_url(url)  # pytorch 1.0
-    return state_dict
+    return sd
     
 def load_seq_stylegan(category, truncation=1.0, **kwargs):  # mconv='seq'):
     ''' loads nn sequential version of stylegan2 and puts on gpu'''
