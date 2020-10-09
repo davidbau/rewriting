@@ -22,6 +22,11 @@ class PaintWidget(Widget):
         self.dragpos = Property(None)
         self.dragging = Property(False)
 
+    def render(self, imgdata, source=None):
+        """Converts a pil image or some tensor to a url to show inline."""
+        from . import renormalize
+        self.image = renormalize.as_url(imgdata, source=source)
+
     def widget_js(self):
         return minify(f'''
       {PAINT_WIDGET_JS}
