@@ -36,7 +36,7 @@ source deactivate
 rm -rf ~/.conda/envs/${RECIPE}
 
 # Build new environment based on the recipe.
-conda env create setup/${RECIPE}.yml
+conda env create -f setup/${RECIPE}.yml
 
 # Set up CUDA_HOME to set itself up correctly on every source activate
 # https://stackoverflow.com/questions/31598963
