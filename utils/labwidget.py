@@ -67,13 +67,13 @@ class Model(object):
     with the given value.
     '''
 
-    def on(self, name, cb):
+    def on(self, name, cb, internal=False):
         '''
         Registers a listener for named events and properties.
         A space-separated list of names can be provided as `name`.
         '''
         for n in name.split():
-            self.prop(n).on(cb)
+            self.prop(n).on(cb, internal=internal)
         return self
 
     def off(self, name, cb=None):
@@ -198,6 +198,14 @@ class Widget(Model):
         # Each widget has a "write" event that is used to insert
         # html before the widget.
         self.write = Trigger()
+
+    def set_style(self, k, v=None):
+        d = self.style or {}
+        if v is None and isinstance(k, dict):
+            d.update(k)
+        else:
+            d[k] = v
+        self.style = d
 
     def widget_js(self):
         '''
@@ -355,6 +363,9 @@ class Trigger(object):
         triggered, and on a child when the parent has notified.  By
         default notifies all listeners.
         '''
+        # Allow direct delegation to a handler
+        if isinstance(value, Event):
+            value = value.value
         self.notify(value)
 
     def trigger(self, value=None):
@@ -393,7 +404,7 @@ class Trigger(object):
         the value will be passed as a single argument.
         '''
         for cb, internal in self._listeners:
-            with enter_handler(self.name, internal) as ctx:
+            with block_events(self.name, cb, internal) as ctx:
                 if ctx.silence:
                     # do not notify recursively...
                     # print(f'silenced recursive {self.name} {cb.__name__}')
@@ -436,6 +447,9 @@ class Property(Trigger):
         then notify listeners.  This method can be overridden,
         for example to validate values.
         '''
+        # Allow direct delegation to a handler
+        if isinstance(value, Event):
+            value = value.value
         self.value = value
         self.notify(value)
 
@@ -467,24 +481,29 @@ class Event(object):
 
 entered_handler_stack = []
 
-
-class enter_handler(object):
-    def __init__(self, name, internal):
+class block_events(object):
+    def __init__(self, name='block_events', cb=None, internal=False):
         global entered_handler_stack
         self.internal = internal
+        self.cb = cb
         self.name = name
-        self.silence = (not internal) and (len(entered_handler_stack) > 0)
+        if not internal:
+            self.silence = any(
+                (not s.internal)
+                for s in entered_handler_stack)
+        else:
+            self.silence = any(
+                (s.cb == cb and s.name == name)
+                for s in entered_handler_stack)
 
     def __enter__(self):
         global entered_handler_stack
-        if not self.internal:
-            entered_handler_stack.append(self)
+        entered_handler_stack.append(self)
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         global entered_handler_stack
-        if not self.internal:
-            entered_handler_stack.pop()
+        entered_handler_stack.pop()
 
 
 class capture_output(object):
@@ -605,6 +624,41 @@ class Textbox(Widget):
             html_str = f"""<span>{self.desc}</span>{html_str}"""
         return html_str
 
+
+class Textarea(Widget):
+    def __init__(self, value='', rows=2, cols=20, **kwargs):
+        super().__init__(**kwargs)
+        # databinding is defined using Property objects.
+        self.value = Property(value)
+        self.rows = Property(rows)
+        self.cols = Property(cols)
+
+    def widget_js(self):
+        # Both "model" and "element" objects are defined within the scope
+        # where the js is run.    "element" looks for the element with id
+        # self.view_id(); if widget_html is overridden, this id should be used.
+        return minify('''
+          element.value = model.get('value');
+          element.rows = model.get('rows');
+          element.cols = model.get('cols');
+          element.addEventListener('blur', (e) => {
+            model.set('value', element.value);
+          });
+          model.on('value', (ev) => {
+            element.value = model.get('value');
+          });
+          model.on('rows', (ev) => {
+            element.rows = model.get('rows');
+          });
+          model.on('cols', (ev) => {
+            element.cols = model.get('cols');
+          });
+        ''')
+
+    def widget_html(self):
+        return f'''<textarea {self.std_attrs()} rows="{
+            self.rows}" cols="{self.cols}">{
+            html.escape(str(self.value))}"</textarea>'''
 
 class Range(Widget):
     def __init__(self, value=50, min=0, max=100, **kwargs):
