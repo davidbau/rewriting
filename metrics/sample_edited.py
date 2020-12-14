@@ -56,6 +56,6 @@ with torch.no_grad():
     for imgnum in tqdm(range(N)):
         z = zdataset.z_sample_for_model(model, size=1, seed=imgnum).cuda()
         x_real = gw.sample_image_from_latent(z).detach().cpu()
-        saver.add(to_pil(x_real[0] * 0.5 + 0.5), rd(f'{imgnum}.png'))
+        saver.add(to_pil(x_real[0].mul_(0.5).add_(0.5).clamp_(0, 1)), rd(f'{imgnum}.png'))
 saver.join()
 rd.done()
