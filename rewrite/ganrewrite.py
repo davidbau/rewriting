@@ -1,12 +1,10 @@
 import copy
 import os
 import torch
-import json
 import random
 import time
 import warnings
 from utils import nethook, renormalize, pbar, tally, imgviz
-from collections import OrderedDict
 import torchvision
 
 
@@ -819,7 +817,7 @@ def rank_one_conv(weight, direction):
 
 
 def zca_from_cov(cov):
-    evals, evecs = torch.symeig(cov.double(), eigenvectors=True)
+    evals, evecs = torch.linalg.eigh(cov.double(), UPLO='U')
     zca = torch.mm(torch.mm(evecs, torch.diag
                             (evals.sqrt().clamp(1e-20).reciprocal())),
                    evecs.t()).to(cov.dtype)
