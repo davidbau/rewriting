@@ -88,7 +88,7 @@ The code runs using PyTorch.
 * The method and interface can be found in `/rewrite`
 * Notebooks are in `/notebooks`: see `rewriting-interface.ipynb` for the demonstration UI.
 * Quantitative experiments in `/metrics`, dissection utilities in `/utils`.
-  Experiments from section 5.1 can be repoduced by `/experiments.sh`,
+  Experiments from section 5.1 can be reproduced  by `/experiments.sh`,
   and section 5.2 can be reproduced by `/watermarks.sh`.  The experiment
   in section 5.3 runs in ithe notebook `/notebooks/reflection-rule-change.ipynb`.
 
